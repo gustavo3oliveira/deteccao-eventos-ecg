@@ -66,42 +66,22 @@ ecg = ecgs(1:N,1) - mean(ecgs(1:N,1));
 
 %% Implementação do filtro passa-baixas
 
-b_l = zeros(1,13);
-b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
-a_l = 32*[1 -2 1];
-ecg_l = filter(b_l,a_l,ecg);
+b = zeros(1,13);
+b(1) = 1; b(7) = -2; b(12) = 1;
+a = 32*[1 -2 1];
+ecg_lp_filter = filter(lowpass_num,lowpass_den,ecg);
 
+
+figure; 
+plot(ecg_lp_filter);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1');    
+drawnow;
 
 %% Implementação do filtro passa-altas
 
-b_h = zeros(1,33);
-b_h(1) = 1; b_h(33) = -1;
-a_h = [1 -1];
-ecg_h = filter(b_h,a_h,ecg_l);
-%%
-figure; 
-subplot(2,1,1); 
-plot(ts(1:N),ecg);
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 sem filtrar'); 
-hold on;
-subplot(2,1,2); 
-plot(ts(1:N),ecg_h);
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 filtrada');    
-drawnow;
-
-% Observação: Aumento da amplitude 
-
-%% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
-figure;
-freqz(b_l,a_l)
-title('Resposta em frequência do filtro passa-baixas')
-
-figure;
-freqz(b_h,a_h)
-title('Resposta em frequência do filtro passa-altas')
+b = zeros(1,33);
+b(1) = 1; b(33) = 1;
+a = [1 -1];
