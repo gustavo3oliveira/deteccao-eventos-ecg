@@ -10,8 +10,6 @@
 % anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.      
 
-close all
-
 %%
 Fa          =360;  %Hz
 for n =118:118
@@ -71,19 +69,16 @@ ecg = ecgs(1:N,1) - mean(ecgs(1:N,1));
 b_l = zeros(1,13);
 b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
 a_l = 32*[1 -2 1];
+tf(b_l,a_l,0.1)
 ecg_l = filter(b_l,a_l,ecg);
+
 
 %% Implementação do filtro passa-altas
 
 b_h = zeros(1,33);
-% b_h(1) = 1; b_h(33) = -1;
-% a_h = [1 -1];
-b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
-a_h = 32*[1 -1];
+b_h(1) = 1; b_h(33) = -1;
+a_h = [1 -1];
 ecg_h = filter(b_h,a_h,ecg_l);
-
-% Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
-
 %%
 figure; 
 subplot(2,1,1); 
