@@ -76,32 +76,12 @@ ecg_l = filter(b_l,a_l,ecg);
 %% Implementação do filtro passa-altas
 
 b_h = zeros(1,33);
-% b_h(1) = 1; b_h(33) = -1;
-% a_h = [1 -1];
 b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
 a_h = 32*[1 -1];
-ecg_h = filter(b_h,a_h,ecg_l);
+% Resultado filtrado em um passa banda (band-pass)
+ecg_bp = filter(b_h,a_h,ecg_l);
 
 % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
-
-%%
-figure; 
-subplot(2,1,1); 
-plot(ts(1:N),ecg);
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 sem filtrar'); 
-hold on;
-subplot(2,1,2); 
-plot(ts(1:N),ecg_h);
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 filtrado');    
-drawnow;
-
-% Observação: Aumento da amplitude 
 
 %% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
 figure;
@@ -111,3 +91,103 @@ title('Resposta em frequência do filtro passa-baixas')
 figure;
 freqz(b_h,a_h)
 title('Resposta em frequência do filtro passa-altas')
+
+%% Derivação
+
+ecg_d = zeros(size(ecg_bp));
+
+for k1 = 1:size(ecg_bp,1)
+    if k1 > 4
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1) + ecg_bp(k1-1) - ecg_bp(k1-3) - 2*ecg_bp(k1-4));
+    elseif k1 == 3
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1) + ecg_bp(k1-1));
+    elseif k1 == 2
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1));
+    elseif k1 == 1
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1));
+    end
+end
+
+%% Squaring
+
+ecg_square = ecg_d.^2;
+
+%% Integração
+% Método utilidado: Média móvel com janela igual a 30 elementos
+
+int_N = 30;
+int_mask = (1/30)*ones(int_N,1);
+
+% Convolução com os valores centrais, sem os resultantes do "zero padding".
+ecg_int = conv(ecg_square,int_mask,'same');
+
+%% Plots 
+
+% Plot filtragem
+figure; 
+subplot(2,1,1); 
+plot(ts(1:N),ecg);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 sem filtrar'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_bp);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado');    
+drawnow;
+
+% Derivação
+figure() 
+subplot(2,1,1); 
+plot(ts(1:N),ecg);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 sem filtrar'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_d);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado e derivado');    
+drawnow;
+
+% Squared
+figure() 
+subplot(2,1,1); 
+plot(ts(1:N),ecg);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_square);
+ylabel('mV^2'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado, derivado e squared');    
+drawnow;
+
+% Integrado
+figure() 
+subplot(2,1,1); 
+plot(ts(1:N),ecg);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_int);
+ylabel('mV^2'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado, derivado, squared e integrado');    
+drawnow;
+

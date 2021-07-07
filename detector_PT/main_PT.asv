@@ -10,6 +10,8 @@
 % anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.      
 
+close all
+
 %%
 Fa          =360;  %Hz
 for n =118:118
@@ -69,17 +71,53 @@ ecg = ecgs(1:N,1) - mean(ecgs(1:N,1));
 b_l = zeros(1,13);
 b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
 a_l = 32*[1 -2 1];
-tf(b_l,a_l,0.1)
 ecg_l = filter(b_l,a_l,ecg);
-
 
 %% Implementação do filtro passa-altas
 
 b_h = zeros(1,33);
-b_h(1) = 1; b_h(33) = -1;
-a_h = [1 -1];
-ecg_h = filter(b_h,a_h,ecg_l);
-%%
+b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
+a_h = 32*[1 -1];
+% Resultado filtrado em um passa banda (band-pass)
+ecg_bp = filter(b_h,a_h,ecg_l);
+
+% Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
+
+%% Derivação
+
+ecg_d = zeros(size(ecg_bp));
+
+for k1 = 1:size(ecg_bp,1)
+    if k1 > 4
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1) + ecg_bp(k1-1) - ecg_bp(k1-3) - 2*ecg_bp(k1-4));
+    elseif k1 == 3
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1) + ecg_bp(k1-1));
+    elseif k1 == 2
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1));
+    elseif k1 == 1
+        ecg_d(k1) = (1/8)*(2*ecg_bp(k1));
+    end
+end
+
+%% Squaring
+
+ecg_square = ecg_d.^2;
+
+%% Integração
+
+int_N = 30;
+int_mask = ones(int_N,1);
+
+for k1 = 1:size(ecg_bp,1)
+
+end
+
+for k1 = 1:int_N
+    
+
+%% Plots 
+
+% Plot filtragem
 figure; 
 subplot(2,1,1); 
 plot(ts(1:N),ecg);
@@ -89,14 +127,29 @@ grid on;
 title('Sinal 1 sem filtrar'); 
 hold on;
 subplot(2,1,2); 
-plot(ts(1:N),ecg_h);
+plot(ts(1:N),ecg_bp);
 ylabel('mV'); 
 xlabel('s'); 
 grid on;
 title('Sinal 1 filtrado');    
 drawnow;
 
-% Observação: Aumento da amplitude 
+% Derivação
+figure() 
+subplot(2,1,1); 
+plot(ts(1:N),ecg_bp);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_d);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado e derivado');    
+drawnow;
 
 %% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
 figure;
