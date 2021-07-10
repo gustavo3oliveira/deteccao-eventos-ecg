@@ -13,7 +13,6 @@
 close all
 
 %%
-Fa          =360;  %Hz
 for n =118:118
     arqnum =sprintf('%3d.mat',n);
     load (arqnum);      
@@ -37,6 +36,7 @@ for n =118:118
     drawnow;
 end
 fprintf('\n Fim \n');
+Ts = 1/Fs;
 %% Load do sinal no espaço de trabalho
 
 n =111;
@@ -64,7 +64,7 @@ drawnow;
 qrs_ann = ann(row_qrs);     %Vetor com as posições das anotações
 qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
-ecg = ecgs(1:N,1) - mean(ecgs(1:N,1));
+ecg = ecgs(1:N,1) - mean(ecgs(1:N,1)); % NÃO ENTENDI (ROBERTO)
 
 %% Implementação do filtro passa-baixas
 
@@ -82,6 +82,15 @@ a_h = 32*[1 -1];
 ecg_bp = filter(b_h,a_h,ecg_l);
 
 % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
+
+%% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
+figure;
+freqz(b_l,a_l)
+title('Resposta em frequência do filtro passa-baixas')
+
+figure;
+freqz(b_h,a_h)
+title('Resposta em frequência do filtro passa-altas')
 
 %% Derivação
 
@@ -104,16 +113,57 @@ end
 ecg_square = ecg_d.^2;
 
 %% Integração
+% Método utilidado: Média móvel com janela igual a 30 elementos
 
 int_N = 30;
-int_mask = ones(int_N,1);
+int_mask = (1/int_N)*ones(int_N,1);
 
-for k1 = 1:size(ecg_bp,1)
+% Convolução com os valores centrais, sem os resultantes do "zero padding".
+ecg_int = conv(ecg_square,int_mask,'same');
 
-end
+%% Algoritmo de Pan-Tompkins
 
-for k1 = 1:int_N
+% Definicão da matriz de eventos
+% tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
+eventos = NaN(size(ecg_int));
+
+% Sinal pré-processado
+ecg_pp = ecg_int;
+
+% Vetores de média
+RR_AVERAGE1_ARRAY = zeros(8,1);
+RR_AVERAGE2_ARRAY = zeros(8,1);
+
+% Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
+N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
+
+% Pico de sinal
+SPKI = max(ecg_pp(1:N_treino));
+% Pico de ruído
+NPKI = 0;
+
+% Iniciando o primeiro 1 segundo sem eventos (eventos = 0)
+evento_cont = 0;
+
+THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+
+% Aplicação no sinal do tempo de treinamento em diante
+for k1 = (N_treino+1):size(ecg_pp,1)
     
+    evento_cont = 0;
+    
+    if (ecg_pp(k1) > THRESHOLD_I1) 
+        SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
+        eventos(k1) = 1;
+    else  
+        NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI; 
+    end
+    % Atualizar os thresholds
+    THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+    THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+    
+end
 
 %% Plots 
 
@@ -137,11 +187,11 @@ drawnow;
 % Derivação
 figure() 
 subplot(2,1,1); 
-plot(ts(1:N),ecg_bp);
+plot(ts(1:N),ecg);
 ylabel('mV'); 
 xlabel('s'); 
 grid on;
-title('Sinal 1 filtrado'); 
+title('Sinal 1 sem filtrar'); 
 hold on;
 subplot(2,1,2); 
 plot(ts(1:N),ecg_d);
@@ -151,11 +201,47 @@ grid on;
 title('Sinal 1 filtrado e derivado');    
 drawnow;
 
-%% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
-figure;
-freqz(b_l,a_l)
-title('Resposta em frequência do filtro passa-baixas')
+% Squared
+figure() 
+subplot(2,1,1); 
+plot(ts(1:N),ecg);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_square);
+ylabel('mV^2'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado, derivado e squared');    
+drawnow;
 
-figure;
-freqz(b_h,a_h)
-title('Resposta em frequência do filtro passa-altas')
+% Integrado
+figure() 
+subplot(2,1,1); 
+plot(ts(1:N),ecg);
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado'); 
+hold on;
+subplot(2,1,2); 
+plot(ts(1:N),ecg_int);
+ylabel('mV^2'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 filtrado, derivado, squared e integrado');    
+drawnow;
+
+% Detecção
+figure; 
+plot(ts(1:N),ecg,ts(1:N),eventos,'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos');    
+drawnow;
+% obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
+
