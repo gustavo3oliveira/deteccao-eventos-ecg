@@ -143,6 +143,8 @@ SPKI = max(ecg_pp(1:N_treino));
 NPKI = 0;
 
 % Inicializando o contador de pontos em um evento integrado
+% Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
+% A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
 evento_cont = 0;
 
 THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
@@ -157,7 +159,7 @@ for k1 = (N_treino+1):size(ecg_pp,1)
         evento_cont = evento_cont + 1;
     else  
         NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
-        eventos(k1-(evento_cont-1):k1) = 0; % Atribuindo 0 a todos os instantes do evento integrado, menos o primeiro (disparo)
+        eventos(k1-(evento_cont-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
         evento_cont = 0;
     end
     % Atualizar os thresholds
