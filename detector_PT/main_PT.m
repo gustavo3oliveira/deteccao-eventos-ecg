@@ -13,7 +13,7 @@
 close all
 
 %%
-for n =118:118
+for n =111:111
     arqnum =sprintf('%3d.mat',n);
     load (arqnum);      
        % save(arq_mat,'ecgs','ts','Fs','ann','type');  Ver documentacao abaixo sobre as variáveis
@@ -39,7 +39,7 @@ fprintf('\n Fim \n');
 Ts = 1/Fs;
 %% Load do sinal no espaço de trabalho
 
-n =111;
+n =118;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -126,6 +126,7 @@ ecg_int = conv(ecg_square,int_mask,'same');
 % Definicão da matriz de eventos
 % tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
 eventos = NaN(size(ecg_int));
+eventos_fn = NaN(size(ecg_int));
 
 % Sinal pré-processado
 ecg_pp = ecg_int;
@@ -139,17 +140,26 @@ N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado p
 
 % Pico de sinal
 SPKI = max(ecg_pp(1:N_treino));
+SPKI_fn = max(ecg_pp(1:N_treino));
+
 % Pico de ruído
 NPKI = 0;
+NPKI_fn = 0;
 
 % Inicializando o contador de pontos em um evento integrado
 % Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
 % A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
 evento_cont = 0;
+evento_fn_cont = 0;
+falso_negativo_cont = 0;
 
 THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
 THRESHOLD_I2 = 0.5*THRESHOLD_I1;
 
+THRESHOLD_I1_fn = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
+
+% Detecção de eventos sem detecção de falsos negativos
 % Aplicação no sinal do tempo de treinamento em diante
 for k1 = (N_treino+1):size(ecg_pp,1)  
   
@@ -167,6 +177,73 @@ for k1 = (N_treino+1):size(ecg_pp,1)
     THRESHOLD_I2 = 0.5*THRESHOLD_I1;
     
 end
+
+% Detecção de eventos com detecção de falsos negativos
+for k1 = (N_treino+1):size(ecg_pp,1)  
+  
+    if (ecg_pp(k1) > THRESHOLD_I1_fn) 
+        SPKI_fn = 0.125*ecg_pp(k1) + 0.875*SPKI_fn; 
+        eventos_fn(k1) = 1;
+        evento_fn_cont = evento_fn_cont + 1;
+    else
+        if (ecg_pp(k1) > THRESHOLD_I2_fn)
+            SPKI_fn = 0.125*ecg_pp(k1) + 0.875*SPKI_fn; 
+            eventos_fn(k1) = 1;
+            evento_fn_cont = evento_fn_cont + 1;
+            falso_negativo_cont = falso_negativo_cont + 1;
+            
+        else
+            NPKI_fn = 0.125*ecg_pp(k1) + 0.875*NPKI_fn;
+            eventos_fn(k1-(evento_fn_cont-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
+            evento_fn_cont = 0;
+        end
+    end
+    % Atualizar os thresholds
+    THRESHOLD_I1_fn = NPKI + 0.25*(evento_fn_cont - NPKI_fn);
+    THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;   
+end
+
+
+%% Plot comparativo com seleção do período QRS
+
+ann_number =100;
+t1 = ann(ann_number,1);
+t2 = ann(ann_number+3,1);
+
+figure; 
+subplot(5,1,1); 
+plot(ts(t1:t2),ecg(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG original'); 
+hold on;
+subplot(5,1,2); 
+plot(ts(t1:t2),ecg_bp(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG filtrado');
+subplot(5,1,3); 
+plot(ts(t1:t2),ecg_d(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG derivado'); 
+subplot(5,1,4); 
+plot(ts(t1:t2),ecg_square(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG squared'); 
+subplot(5,1,5); 
+plot(ts(t1:t2),ecg_int(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG integrado'); 
+drawnow;
+
 
 %% Plots 
 
@@ -238,6 +315,7 @@ grid on;
 title('Sinal 1 filtrado, derivado, squared e integrado');    
 drawnow;
 
+%%
 % Detecção
 figure; 
 plot(ts(1:N),ecg,ts(1:N),eventos,'r*');
@@ -248,3 +326,28 @@ title('Sinal 1 e a deteção de eventos');
 drawnow;
 % obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
 
+%%
+ann_number =40;
+t1 = ann(ann_number,1);
+t2 = ann(ann_number+20,1);
+qrs = ecgs(t1:t2,1);
+qrs_t = ts(t1:t2);
+
+figure; 
+subplot(2,1,1)
+plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos');  
+subplot(2,1,2)
+plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos_fn(t1:t2),'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos com detecção de falsos negativos'); 
+drawnow;
+
+figure; 
+plot(eventos==eventos_fn)
+title('Falsos negativos'); 
