@@ -13,30 +13,30 @@
 close all
 
 %%
-for n =111:111
-    arqnum =sprintf('%3d.mat',n);
-    load (arqnum);      
-       % save(arq_mat,'ecgs','ts','Fs','ann','type');  Ver documentacao abaixo sobre as variáveis
-       % ecgs(Nt,2):[double] matriz com Nt linhas por 2 colunas. Cada coluna contém sinal com Nt amostras já calibradas em mV
-       % ts(Nt,1): [double] vetor com Nt instantes de tempo em s
-       % Fs: frequencia de amostragem em Hz
-       % ann(Na,1):[double] vetor contendo a posicao (em amostra) da anotacao. Tem 'Na' anotacoes. Ex.: suponha que a terceira 
-       %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
-       % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.      
-    N   =size(ecgs,1);
-    fprintf('\n %s com %d amostras',arqnum,N);
-    Ntypes=numel(type);
-    %Plot 2D version of signal and labels
-    figure; 
-    maxEcg1 =max(ecgs(:,1))*ones(Ntypes,1);
-    subplot(2,1,1); plot(ts(1:N),ecgs(1:N,1));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 1']); hold on;
-                    plot(ts(ann(ann<N)+1),ecgs(ann(ann<N)+1),'ro');
-                    text(ts(ann(ann<N)+1),maxEcg1,type);                    
-    subplot(2,1,2); plot(ts(1:N),ecgs(1:N,2));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 2' ]);
-    drawnow;
-end
-fprintf('\n Fim \n');
-Ts = 1/Fs;
+% for n =111:111
+%     arqnum =sprintf('%3d.mat',n);
+%     load (arqnum);      
+%        % save(arq_mat,'ecgs','ts','Fs','ann','type');  Ver documentacao abaixo sobre as variáveis
+%        % ecgs(Nt,2):[double] matriz com Nt linhas por 2 colunas. Cada coluna contém sinal com Nt amostras já calibradas em mV
+%        % ts(Nt,1): [double] vetor com Nt instantes de tempo em s
+%        % Fs: frequencia de amostragem em Hz
+%        % ann(Na,1):[double] vetor contendo a posicao (em amostra) da anotacao. Tem 'Na' anotacoes. Ex.: suponha que a terceira 
+%        %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
+%        % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.      
+%     N   =size(ecgs,1);
+%     fprintf('\n %s com %d amostras',arqnum,N);
+%     Ntypes=numel(type);
+%     %Plot 2D version of signal and labels
+%     figure; 
+%     maxEcg1 =max(ecgs(:,1))*ones(Ntypes,1);
+%     subplot(2,1,1); plot(ts(1:N),ecgs(1:N,1));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 1']); hold on;
+%                     plot(ts(ann(ann<N)+1),ecgs(ann(ann<N)+1),'ro');
+%                     text(ts(ann(ann<N)+1),maxEcg1,type);                    
+%     subplot(2,1,2); plot(ts(1:N),ecgs(1:N,2));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 2' ]);
+%     drawnow;
+% end
+% fprintf('\n Fim \n');
+
 %% Load do sinal no espaço de trabalho
 
 n =118;
@@ -45,6 +45,8 @@ arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
 N   = size(ecgs,1);     %Numero de amostras
 Ntypes=numel(type);     %Numero de tipos de anotação
+
+Ts = 1/Fs;
 
 %% Plot do sinal
 
@@ -188,11 +190,12 @@ for k1 = (N_treino+1):size(ecg_pp,1)
             % Incremento de ocorrência de evento
             evento_cont = evento_cont + 1;
             
-            RR_temp1 = k1*Ts; % associando o instante de tempo inferior
+            RR_temp1 = k1; % associando o instante de tempo inferior
 
             % Cálculo do intervalo RR
-            RR_intervalo = RR_temp1-RR_temp2;
+            RR_intervalo = (RR_temp1-RR_temp2)*Ts; % em segundos já
             
+           
             if (evento_cont > 1) % Para que se tenha realmente uma diferença temporal entre picos R-R 
                 % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
                 RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
@@ -219,18 +222,23 @@ for k1 = (N_treino+1):size(ecg_pp,1)
         eventos(k1-(cont_above_thr-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
         cont_above_thr = 0;
         
-        % Atualização do indicador temporário
-        RR_temp2 = RR_temp1;
     end
           
     % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
     if (RR_intervalo > 1.66*RR_AVERAGE2 && evento_cont > 1) 
         % A segunda parte da condicional indica que agora sim trata-se de uma diferença RR
-        % IMPLEMENTAR o searchback
-        fprintf('searchback \n');
+        fprintf('searchback \n');      
+        for k2 = RR_temp2:k1
+            if(ecg_pp(k2) > THRESHOLD_I2)
+                % Instante recebe deteção de evento baseado em THRESHOLD_I2, mas nada é atualizado pois esse é um outlier
+                eventos(k2) = 1;
+            end
+        end
     end
-        
-        
+
+    % Atualização do temporário 2 (atrasada par autilização no if anterior) 
+    RR_temp2 = RR_temp1;
+   
     % Atualizar os thresholds
     THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
     THRESHOLD_I2 = 0.5*THRESHOLD_I1;
