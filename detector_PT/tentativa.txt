@@ -1,0 +1,218 @@
+%% Algoritmo de Pan-Tompkins
+
+% Definicão da matriz de eventos
+% tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
+eventos = NaN(size(ecg_int));
+eventos_fn = NaN(size(ecg_int));
+
+% Sinal pré-processado
+ecg_pp = ecg_int;
+
+% Vetores de média
+RR_AVERAGE1_ARRAY = zeros(8,1);
+RR_AVERAGE2_ARRAY = zeros(8,1);
+
+% Medias
+RR_AVERAGE1 = 0;
+RR_AVERAGE2 = 0;
+
+% Limites
+RR_LOW_LIMIT = 0;
+RR_HIGH_LIMIT = 0;
+
+% Contadores RR
+RR_cont1 = 0;
+
+% Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
+N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
+
+% Pico de sinal
+SPKI = max(ecg_pp(1:N_treino));
+
+% Pico de ruído
+NPKI = 0;
+
+% Inicializando o contador de pontos em um evento integrado
+% Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
+% A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
+evento_cont = 0;
+
+falso_negativo_cont = 0;
+
+THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+
+THRESHOLD_I1_fn = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
+
+% Detecção de eventos sem detecção de falsos negativos
+% Aplicação no sinal do tempo de treinamento em diante
+for k1 = (N_treino+1):size(ecg_pp,1)  
+  
+    if (ecg_pp(k1) > THRESHOLD_I1) 
+        SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
+        eventos(k1) = 1;
+        evento_cont = evento_cont + 1;
+        
+        if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
+            % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
+            RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
+            RR_AVERAGE1_ARRAY(end) = RR_cont1*Ts;
+            RR_AVERAGE1 = mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
+            
+            % No inicio todos são nulos, então deve haver um push inicial para esse caso
+            if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
+                RR_AVERAGE2_ARRAY(1:end-1) = RR_AVERAGE2_ARRAY(2:end);
+                RR_AVERAGE2_ARRAY(end) = RR_cont1*Ts; % RR_AVERAGE2_ARRAY recebe o mesmo intervalo RR calculado para RR_AVERAGE1
+                RR_AVERAGE2 = mean(RR_AVERAGE2_ARRAY); % Cálculo da média 2
+                % Recalculando os limites 
+                RR_LOW_LIMIT = 0.92*RR_AVERAGE2;
+                RR_HIGH_LIMIT = 1.16*RR_AVERAGE2;
+            end
+            
+            % Zerando o contador a cada evento (para que ele sempre conte o tamanho do intervalo)
+            RR_cont1 = 0;
+        end       
+    else  
+        NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
+        eventos(k1-(evento_cont-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
+        evento_cont = 0;              
+    end
+       
+    % Contador de intervalo incrementado a cada instante
+    RR_cont1 = RR_cont1 + 1;
+    
+    % Checando se existe evento no intervalo 166%RR_MISSED_LIMIT
+    if (RR_cont1*Ts > 1.66*RR_AVERAGE2)
+        % Fzer o searchback
+        fprintf('searchback \n');
+    end
+        
+        
+    % Atualizar os thresholds
+    THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+    THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+    
+end
+
+
+
+
+------------------------------------------------------------------------------------------------------
+
+
+
+%% Algoritmo de Pan-Tompkins
+
+% Definicão da matriz de eventos
+% tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
+eventos = NaN(size(ecg_int));
+eventos_fn = NaN(size(ecg_int));
+
+% Sinal pré-processado
+ecg_pp = ecg_int;
+
+% Vetores de média
+RR_AVERAGE1_ARRAY = zeros(8,1);
+RR_AVERAGE2_ARRAY = zeros(8,1);
+
+% Medias
+RR_AVERAGE1 = 0;
+RR_AVERAGE2 = 0;
+
+% Limites
+RR_LOW_LIMIT = 0;
+RR_HIGH_LIMIT = 0;
+
+% Indicadores temporais temporários de eventos 
+RR_ind1 = 0;
+RR_ind2 = 0;
+% obs.: RR_ind1 e RR_ind2 devem ir se alternando para 
+
+% Tamano do intervalo RR [s]
+RR_intervalo = 0;
+
+% Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
+N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
+
+% Pico de sinal
+SPKI = max(ecg_pp(1:N_treino));
+
+% Pico de ruído
+NPKI = 0;
+
+% Inicializando o contador de pontos em um evento integrado
+% Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
+% A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
+evento_cont = 0;
+
+falso_negativo_cont = 0;
+
+THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+
+THRESHOLD_I1_fn = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
+
+% Detecção de eventos sem detecção de falsos negativos
+% Aplicação no sinal do tempo de treinamento em diante
+for k1 = (N_treino+1):size(ecg_pp,1)  
+  
+    if (ecg_pp(k1) > THRESHOLD_I1) 
+        SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
+        eventos(k1) = 1;
+        evento_cont = evento_cont + 1;
+        
+        if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
+            if(RR_ind1 <= RR_ind2)%(temp_RR == 0) caso de igualdade quando eles são iniciados em 0
+                RR_ind1 = k1*Ts; % associando o instante de tempo inferior
+                temp_RR = 1; % O temporário a ser indicado passará a ser o 2
+            elseif(RR_ind1 > RR_ind2)%(temp_RR ==1) %
+                RR_ind2 = k1*Ts;
+                temp_RR = 0; % O temporário a ser indicado passará a ser o 1
+                % Cálculo do intervalo RR
+                RR_intervalo = RR_ind2-RR_ind1;
+                % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
+                RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
+                RR_AVERAGE1_ARRAY(end) = RR_intervalo; % Associando a diferença de tempo
+                % Cálculo da média considerando apenas os elementos não nulos
+                RR_AVERAGE1 = sum(RR_AVERAGE1_ARRAY)/nnz(RR_AVERAGE1_ARRAY);% mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
+                % Zerando os indicadores temporais 
+                RR_ind1 = 0;
+                RR_ind2 = 0;
+                
+                % No inicio todos são nulos, então deve haver um push inicial para esse caso
+                if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
+                    RR_AVERAGE2_ARRAY(1:end-1) = RR_AVERAGE2_ARRAY(2:end);
+                    RR_AVERAGE2_ARRAY(end) = RR_AVERAGE1; % RR_AVERAGE2_ARRAY recebe o mesmo intervalo RR calculado para RR_AVERAGE1
+                    % Cálculo da média considerando apenas os elementos não nulos
+                    RR_AVERAGE2 = sum(RR_AVERAGE2_ARRAY)/nnz(RR_AVERAGE2_ARRAY); % Cálculo da média 2
+                    % Recalculando os limites 
+                    RR_LOW_LIMIT = 0.92*RR_AVERAGE2;
+                    RR_HIGH_LIMIT = 1.16*RR_AVERAGE2;
+                end
+            end
+        end       
+    else  
+        NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
+        eventos(k1-(evento_cont-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
+        evento_cont = 0;              
+    end
+       
+    % Contador de intervalo incrementado a cada instante
+    % RR_cont1 = RR_cont1 + 1;
+    
+    % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
+    if (RR_intervalo > 1.66*RR_AVERAGE2)
+        % IMPLEMENTAR o searchback
+        fprintf('searchback \n');
+    end
+        
+        
+    % Atualizar os thresholds
+    THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+    THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+    
+end
+
+

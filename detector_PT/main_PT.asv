@@ -13,7 +13,7 @@
 close all
 
 %%
-for n =118:118
+for n =111:111
     arqnum =sprintf('%3d.mat',n);
     load (arqnum);      
        % save(arq_mat,'ecgs','ts','Fs','ann','type');  Ver documentacao abaixo sobre as variáveis
@@ -39,7 +39,7 @@ fprintf('\n Fim \n');
 Ts = 1/Fs;
 %% Load do sinal no espaço de trabalho
 
-n =111;
+n =118;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -126,6 +126,7 @@ ecg_int = conv(ecg_square,int_mask,'same');
 % Definicão da matriz de eventos
 % tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
 eventos = NaN(size(ecg_int));
+eventos_fn = NaN(size(ecg_int));
 
 % Sinal pré-processado
 ecg_pp = ecg_int;
@@ -134,36 +135,151 @@ ecg_pp = ecg_int;
 RR_AVERAGE1_ARRAY = zeros(8,1);
 RR_AVERAGE2_ARRAY = zeros(8,1);
 
+% Medias
+RR_AVERAGE1 = 0;
+RR_AVERAGE2 = 0;
+
+% Limites
+RR_LOW_LIMIT = 0;
+RR_HIGH_LIMIT = 0;
+
+% Indicadores temporais temporários de eventos 
+RR_ind1 = 0;
+RR_ind2 = 0;
+% obs.: RR_ind1 e RR_ind2 devem ir se alternando para 
+
+% Tamano do intervalo RR [s]
+RR_intervalo = 0;
+
 % Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
 N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
 
 % Pico de sinal
 SPKI = max(ecg_pp(1:N_treino));
+
 % Pico de ruído
 NPKI = 0;
 
-% Iniciando o primeiro 1 segundo sem eventos (eventos = 0)
-evento_cont = 0;
+% Inicializando o contador de pontos em um evento integrado
+% Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
+% A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
+evento_cont_int = 0;
+
+% Número de eventos total
+evento_cont_geral = 0;
+
+falso_negativo_cont = 0;
 
 THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
 THRESHOLD_I2 = 0.5*THRESHOLD_I1;
 
+THRESHOLD_I1_fn = NPKI + 0.25*(SPKI - NPKI);
+THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
+
+% Detecção de eventos sem detecção de falsos negativos
 % Aplicação no sinal do tempo de treinamento em diante
-for k1 = (N_treino+1):size(ecg_pp,1)
-    
-    evento_cont = 0;
-    
+for k1 = (N_treino+1):size(ecg_pp,1)  
+  
     if (ecg_pp(k1) > THRESHOLD_I1) 
         SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
         eventos(k1) = 1;
+        evento_cont_int = evento_cont_int + 1;
+        
+        if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
+
+            RR_ind1 = k1*Ts; % associando o instante de tempo inferior
+
+            % Cálculo do intervalo RR
+            RR_intervalo = RR_ind1-RR_ind2;
+            
+            if (RR_ind2>0) % Para que se tenha realmente uma diferença temporal entre picos R-R (supondo que não há 
+                % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
+                RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
+                RR_AVERAGE1_ARRAY(end) = RR_intervalo; % Associando a diferença de tempo
+                % Cálculo da média considerando apenas os elementos não nulos
+                RR_AVERAGE1 = sum(RR_AVERAGE1_ARRAY)/nnz(RR_AVERAGE1_ARRAY);% mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
+
+
+                % No inicio todos são nulos, então deve haver um push inicial para esse caso
+                if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
+                    RR_AVERAGE2_ARRAY(1:end-1) = RR_AVERAGE2_ARRAY(2:end);
+                    RR_AVERAGE2_ARRAY(end) = RR_AVERAGE1; % RR_AVERAGE2_ARRAY recebe o mesmo intervalo RR calculado para RR_AVERAGE1
+                    % Cálculo da média considerando apenas os elementos não nulos
+                    RR_AVERAGE2 = sum(RR_AVERAGE2_ARRAY)/nnz(RR_AVERAGE2_ARRAY); % Cálculo da média 2
+                    % Recalculando os limites 
+                    RR_LOW_LIMIT = 0.92*RR_AVERAGE2;
+                    RR_HIGH_LIMIT = 1.16*RR_AVERAGE2;
+                end
+            end           
+        end       
     else  
-        NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI; 
+        
+        NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
+        eventos(k1-(evento_cont_int-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
+        evento_cont_int = 0;
+        evento_cont_int = 0;
+        
+        % Atualização do indicador temporário
+        RR_ind2 = RR_ind1;
     end
+       
+    % Contador de intervalo incrementado a cada instante
+    % RR_cont1 = RR_cont1 + 1;
+    
+    % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
+    if (RR_intervalo > 1.66*RR_AVERAGE2 && RR_ind2 > 0) % A segunda parte da condicional indica que agora sim trata-se de uma diferença RR
+        % IMPLEMENTAR o searchback
+        fprintf('searchback \n');
+    end
+        
+        
     % Atualizar os thresholds
     THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
     THRESHOLD_I2 = 0.5*THRESHOLD_I1;
     
 end
+
+
+%% Plot comparativo com seleção do período QRS
+
+ann_number =100;
+t1 = ann(ann_number,1);
+t2 = ann(ann_number+3,1);
+
+figure; 
+subplot(5,1,1); 
+plot(ts(t1:t2),ecg(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG original'); 
+hold on;
+subplot(5,1,2); 
+plot(ts(t1:t2),ecg_bp(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG filtrado');
+subplot(5,1,3); 
+plot(ts(t1:t2),ecg_d(t1:t2));
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG derivado'); 
+subplot(5,1,4); 
+plot(ts(t1:t2),ecg_square(t1:t2));
+ylabel('mV^2'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG squared'); 
+subplot(5,1,5); 
+plot(ts(t1:t2),ecg_int(t1:t2));
+ylabel('mV^2'); 
+xlabel('s'); 
+grid on;
+title('Sinal ECG integrado'); 
+drawnow;
+
 
 %% Plots 
 
@@ -235,6 +351,7 @@ grid on;
 title('Sinal 1 filtrado, derivado, squared e integrado');    
 drawnow;
 
+%%
 % Detecção
 figure; 
 plot(ts(1:N),ecg,ts(1:N),eventos,'r*');
@@ -245,3 +362,28 @@ title('Sinal 1 e a deteção de eventos');
 drawnow;
 % obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
 
+%%
+ann_number =40;
+t1 = ann(ann_number,1);
+t2 = ann(ann_number+20,1);
+qrs = ecgs(t1:t2,1);
+qrs_t = ts(t1:t2);
+
+figure; 
+subplot(2,1,1)
+plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos');  
+subplot(2,1,2)
+plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos_fn(t1:t2),'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos com detecção de falsos negativos'); 
+drawnow;
+
+figure; 
+plot(eventos==eventos_fn)
+title('Falsos negativos'); 

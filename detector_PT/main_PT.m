@@ -135,23 +135,38 @@ ecg_pp = ecg_int;
 RR_AVERAGE1_ARRAY = zeros(8,1);
 RR_AVERAGE2_ARRAY = zeros(8,1);
 
+% Medias
+RR_AVERAGE1 = 0;
+RR_AVERAGE2 = 0;
+
+% Limites
+RR_LOW_LIMIT = 0;
+RR_HIGH_LIMIT = 0;
+
+% Indicadores temporais temporários de eventos 
+RR_temp1 = 0;
+RR_temp2 = 0;
+% obs.: RR_ind1 e RR_ind2 devem ir se alternando para 
+
+% Tamano do intervalo RR [s]
+RR_intervalo = 0;
+
 % Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
 N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
 
 % Pico de sinal
 SPKI = max(ecg_pp(1:N_treino));
-SPKI_fn = max(ecg_pp(1:N_treino));
 
 % Pico de ruído
 NPKI = 0;
-NPKI_fn = 0;
 
-% Inicializando o contador de pontos em um evento integrado
+% Inicializando o contador de pontos acima do threshold em um evento integrado
 % Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
 % A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
+cont_above_thr = 0;
+
+% Número de eventos total
 evento_cont = 0;
-evento_fn_cont = 0;
-falso_negativo_cont = 0;
 
 THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
 THRESHOLD_I2 = 0.5*THRESHOLD_I1;
@@ -166,47 +181,66 @@ for k1 = (N_treino+1):size(ecg_pp,1)
     if (ecg_pp(k1) > THRESHOLD_I1) 
         SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
         eventos(k1) = 1;
-        evento_cont = evento_cont + 1;
+        cont_above_thr = cont_above_thr + 1;
+        
+        if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
+            
+            % Incremento de ocorrência de evento
+            evento_cont = evento_cont + 1;
+            
+            RR_temp1 = k1*Ts; % associando o instante de tempo inferior
+
+            % Cálculo do intervalo RR
+            RR_intervalo = RR_temp1-RR_temp2;
+            
+            if (evento_cont > 1) % Para que se tenha realmente uma diferença temporal entre picos R-R 
+                % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
+                RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
+                RR_AVERAGE1_ARRAY(end) = RR_intervalo; % Associando a diferença de tempo
+                % Cálculo da média considerando apenas os elementos não nulos
+                RR_AVERAGE1 = sum(RR_AVERAGE1_ARRAY)/nnz(RR_AVERAGE1_ARRAY);% mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
+
+
+                % No inicio todos são nulos, então deve haver um push inicial para esse caso
+                if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
+                    RR_AVERAGE2_ARRAY(1:end-1) = RR_AVERAGE2_ARRAY(2:end);
+                    RR_AVERAGE2_ARRAY(end) = RR_AVERAGE1; % RR_AVERAGE2_ARRAY recebe o mesmo intervalo RR calculado para RR_AVERAGE1
+                    % Cálculo da média considerando apenas os elementos não nulos
+                    RR_AVERAGE2 = sum(RR_AVERAGE2_ARRAY)/nnz(RR_AVERAGE2_ARRAY); % Cálculo da média 2
+                    % Recalculando os limites 
+                    RR_LOW_LIMIT = 0.92*RR_AVERAGE2;
+                    RR_HIGH_LIMIT = 1.16*RR_AVERAGE2;
+                end
+            end           
+        end       
     else  
+        
         NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
-        eventos(k1-(evento_cont-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
-        evento_cont = 0;
+        eventos(k1-(cont_above_thr-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
+        cont_above_thr = 0;
+        
+        % Atualização do indicador temporário
+        RR_temp2 = RR_temp1;
     end
+          
+    % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
+    if (RR_intervalo > 1.66*RR_AVERAGE2 && evento_cont > 1) 
+        % A segunda parte da condicional indica que agora sim trata-se de uma diferença RR
+        % IMPLEMENTAR o searchback
+        fprintf('searchback \n');
+    end
+        
+        
     % Atualizar os thresholds
     THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
     THRESHOLD_I2 = 0.5*THRESHOLD_I1;
     
 end
 
-% Detecção de eventos com detecção de falsos negativos
-for k1 = (N_treino+1):size(ecg_pp,1)  
-  
-    if (ecg_pp(k1) > THRESHOLD_I1_fn) 
-        SPKI_fn = 0.125*ecg_pp(k1) + 0.875*SPKI_fn; 
-        eventos_fn(k1) = 1;
-        evento_fn_cont = evento_fn_cont + 1;
-    else
-        if (ecg_pp(k1) > THRESHOLD_I2_fn)
-            SPKI_fn = 0.125*ecg_pp(k1) + 0.875*SPKI_fn; 
-            eventos_fn(k1) = 1;
-            evento_fn_cont = evento_fn_cont + 1;
-            falso_negativo_cont = falso_negativo_cont + 1;
-            
-        else
-            NPKI_fn = 0.125*ecg_pp(k1) + 0.875*NPKI_fn;
-            eventos_fn(k1-(evento_fn_cont-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
-            evento_fn_cont = 0;
-        end
-    end
-    % Atualizar os thresholds
-    THRESHOLD_I1_fn = NPKI + 0.25*(evento_fn_cont - NPKI_fn);
-    THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;   
-end
-
 
 %% Plot comparativo com seleção do período QRS
 
-ann_number =100;
+ann_number = 100;
 t1 = ann(ann_number,1);
 t2 = ann(ann_number+3,1);
 
@@ -232,13 +266,13 @@ grid on;
 title('Sinal ECG derivado'); 
 subplot(5,1,4); 
 plot(ts(t1:t2),ecg_square(t1:t2));
-ylabel('mV'); 
+ylabel('mV^2'); 
 xlabel('s'); 
 grid on;
 title('Sinal ECG squared'); 
 subplot(5,1,5); 
 plot(ts(t1:t2),ecg_int(t1:t2));
-ylabel('mV'); 
+ylabel('mV^2'); 
 xlabel('s'); 
 grid on;
 title('Sinal ECG integrado'); 
