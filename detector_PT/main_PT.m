@@ -57,7 +57,8 @@ qrs_ann_t = qrs_ann*Ts; % Vetor com a poosição temporal das anotações de pico R
 qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
 % Caso seja necessário um pré-processamento no sinal 
-ecg = ecgs(1:N,1);
+% Normalização no caso
+ecg = ecgs(1:N,1)/max(abs(ecgs(1:N,1)));
 
 %% Implementação do filtro passa-baixas
 
