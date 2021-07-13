@@ -46,6 +46,15 @@ load (arqnum);
 N   = size(ecgs,1);     %Numero de amostras
 Ntypes=numel(type);     %Numero de tipos de anotação
 
+%Plot 2D version of signal and labels
+figure; 
+maxEcg1 =max(ecgs(:,1))*ones(Ntypes,1);
+subplot(2,1,1); plot(ts(1:N),ecgs(1:N,1));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 1']); hold on;
+                plot(ts(ann(ann<N)+1),ecgs(ann(ann<N)+1),'ro');
+                text(ts(ann(ann<N)+1),maxEcg1,type);                    
+subplot(2,1,2); plot(ts(1:N),ecgs(1:N,2));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 2' ]);
+drawnow;
+
 Ts = 1/Fs;
 
 %% Plot do sinal
@@ -63,10 +72,11 @@ drawnow;
 %type = ['A';'B';'V';'N';'A';'B'] % TESTE
 %ann = [1;2;3;4;5;6]% TESTE
 [row_qrs,col_qrs] = find(type~='N' & type~='V');    %Posição das anotações encontradas
-qrs_ann = ann(row_qrs);     %Vetor com as posições das anotações
+qrs_ann = ann(row_qrs); %Vetor com as posições de instante das anotações
+qrs_ann_t = qrs_ann*Ts; % Vetor com a poosição temporal das anotações de pico R
 qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
-ecg = ecgs(1:N,1) - mean(ecgs(1:N,1)); % NÃO ENTENDI (ROBERTO)
+ecg = ecgs(1:N,1);% - mean(ecgs(1:N,1)); % NÃO ENTENDI (ROBERTO)
 
 %% Implementação do filtro passa-baixas
 
@@ -128,7 +138,6 @@ ecg_int = conv(ecg_square,int_mask,'same');
 % Definicão da matriz de eventos
 % tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
 eventos = NaN(size(ecg_int));
-eventos_fn = NaN(size(ecg_int));
 
 % Sinal pré-processado
 ecg_pp = ecg_int;
@@ -245,6 +254,76 @@ for k1 = (N_treino+1):size(ecg_pp,1)
     
 end
 
+% O código não está detectando o último evento (culpa do atraso talvez)
+
+%% Deteção de falsos eventos 
+% Serão comparados os eventos com uma janela de tolerância igual a 50ms
+% ref.: The Accuracy on the Common Pan-Tompkins Based QRS Detection Methods Through Low-Quality Electrocardiogram Database
+% Chengyu Liu et. al.
+% obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
+tolerancia = 100e-3; % [s]
+
+% Contadores de falsos eventos
+TP = 0; % True positive
+FP = 0; % False positive
+TN = 0; % True negative
+FN = 0; % False positive
+
+% Criação de um vetor com a posição temporal dos eventos baseado no vetor de posição intantânea dos mesmos (eventos)
+t_eventos  = zeros(evento_cont,1);
+% Inicializando o segundo contador para atribuição do instante
+k2 = 1;
+for k1 = 1:size(eventos,1)
+    if ~isnan(eventos(k1)) % Toda vez que o elemento não for NaN
+        t_eventos(k2) = k1*Ts;
+        k2 = k2 + 1;
+    end
+end
+
+% Criação do vetor de eventos sem o primeiro segundo. (em segundos, baseado nas anotações)
+qrs_comparativo = qrs_ann_t(qrs_ann_t > 1);
+
+% Fazer a janela com uma matriz de duas colunas e número de eventos linhas (contendo os extremos de tolerância)
+janela_tol = zeros(size(qrs_comparativo,1),2);
+for k1 = 1:size(qrs_comparativo,1)
+    janela_tol(k1,1) = qrs_comparativo(k1) - tolerancia; % Extremo inferior de  tolerância para o evento 
+    janela_tol(k1,2) = qrs_comparativo(k1) + tolerancia; % Extremo superior de  tolerância para o evento 
+end
+
+% Vetor para determinar os falsos negativos 
+% NaN: não há evento associado ao intervalo
+% 1: há evento associado ao intervalo
+fn_eventos = NaN(size(janela_tol,1),1);
+
+% Vetor para determinar os falsos positivos 
+% NaN: não há intervalo associado ao evento
+% 1: há intervalo associado ao evento
+fp_eventos = NaN(size(janela_tol,1),1);
+
+% Falsos positivos (checar se cada evento está abrigado em um intervalo)
+for k1 = 1:size(t_eventos,1)
+    for k2 = 1:size(janela_tol,1) 
+        if (t_eventos(k1) > janela_tol(k2,1) && t_eventos(k1) < janela_tol(k2,2))
+            % Associar evento ao seu intervalo
+            fp_eventos(k1) = 1;
+        end
+    end
+end
+% Cálculo da quantidade de falsos negativos 
+FP = size(fp_eventos,1) - sum(fp_eventos,'omitnan');
+
+% Falsos negativos (checar se cada intervalo abriga um evento)
+for k1 = 1:size(janela_tol,1) 
+    for k2 = 1:size(t_eventos,1)
+        if (t_eventos(k2) > janela_tol(k1,1) && t_eventos(k2) < janela_tol(k1,2))
+            % Associar evento ao seu intervalo
+            fn_eventos(k1) = 1;
+        end
+    end
+end
+% Cálculo da quantidade de falsos negativos 
+FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan');
+
 
 %% Plot comparativo com seleção do período QRS
 
@@ -287,7 +366,40 @@ title('Sinal ECG integrado');
 drawnow;
 
 
-%% Plots 
+%%
+% Detecção
+figure; 
+plot(ts(1:N),ecg,ts(1:N),eventos,'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos');    
+drawnow;
+% obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
+
+%%
+ann_number =30;
+t1 = ann(ann_number,1);
+t2 = ann(ann_number+20,1);
+qrs = ecgs(t1:t2,1);
+qrs_t = ts(t1:t2);
+
+figure; 
+subplot(2,1,1)
+plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos');  
+subplot(2,1,2)
+plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
+ylabel('mV'); 
+xlabel('s'); 
+grid on;
+title('Sinal 1 e a deteção de eventos com detecção de falsos negativos'); 
+drawnow;
+
+%% Plots construção
 
 % Plot filtragem
 figure; 
@@ -356,40 +468,3 @@ xlabel('s');
 grid on;
 title('Sinal 1 filtrado, derivado, squared e integrado');    
 drawnow;
-
-%%
-% Detecção
-figure; 
-plot(ts(1:N),ecg,ts(1:N),eventos,'r*');
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 e a deteção de eventos');    
-drawnow;
-% obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
-
-%%
-ann_number =40;
-t1 = ann(ann_number,1);
-t2 = ann(ann_number+20,1);
-qrs = ecgs(t1:t2,1);
-qrs_t = ts(t1:t2);
-
-figure; 
-subplot(2,1,1)
-plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 e a deteção de eventos');  
-subplot(2,1,2)
-plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos_fn(t1:t2),'r*');
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 e a deteção de eventos com detecção de falsos negativos'); 
-drawnow;
-
-figure; 
-plot(eventos==eventos_fn)
-title('Falsos negativos'); 
