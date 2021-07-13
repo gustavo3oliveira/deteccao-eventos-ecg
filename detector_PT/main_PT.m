@@ -10,36 +10,18 @@
 % anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.      
 
-close all
-
-%%
-% for n =111:111
-%     arqnum =sprintf('%3d.mat',n);
-%     load (arqnum);      
-%        % save(arq_mat,'ecgs','ts','Fs','ann','type');  Ver documentacao abaixo sobre as variáveis
-%        % ecgs(Nt,2):[double] matriz com Nt linhas por 2 colunas. Cada coluna contém sinal com Nt amostras já calibradas em mV
-%        % ts(Nt,1): [double] vetor com Nt instantes de tempo em s
-%        % Fs: frequencia de amostragem em Hz
-%        % ann(Na,1):[double] vetor contendo a posicao (em amostra) da anotacao. Tem 'Na' anotacoes. Ex.: suponha que a terceira 
-%        %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
-%        % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.      
-%     N   =size(ecgs,1);
-%     fprintf('\n %s com %d amostras',arqnum,N);
-%     Ntypes=numel(type);
-%     %Plot 2D version of signal and labels
-%     figure; 
-%     maxEcg1 =max(ecgs(:,1))*ones(Ntypes,1);
-%     subplot(2,1,1); plot(ts(1:N),ecgs(1:N,1));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 1']); hold on;
-%                     plot(ts(ann(ann<N)+1),ecgs(ann(ann<N)+1),'ro');
-%                     text(ts(ann(ann<N)+1),maxEcg1,type);                    
-%     subplot(2,1,2); plot(ts(1:N),ecgs(1:N,2));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 2' ]);
-%     drawnow;
-% end
-% fprintf('\n Fim \n');
+close all 
 
 %% Load do sinal no espaço de trabalho
+% save(arq_mat,'ecgs','ts','Fs','ann','type');  Ver documentacao abaixo sobre as variáveis
+% ecgs(Nt,2):[double] matriz com Nt linhas por 2 colunas. Cada coluna contém sinal com Nt amostras já calibradas em mV
+% ts(Nt,1): [double] vetor com Nt instantes de tempo em s
+% Fs: frequencia de amostragem em Hz
+% ann(Na,1):[double] vetor contendo a posicao (em amostra) da anotacao. Tem 'Na' anotacoes. Ex.: suponha que a terceira 
+%       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
+% type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.  
 
-n =118;
+n =112;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -69,14 +51,13 @@ drawnow;
 
 %% Tratamento de dados 
 
-%type = ['A';'B';'V';'N';'A';'B'] % TESTE
-%ann = [1;2;3;4;5;6]% TESTE
-[row_qrs,col_qrs] = find(type~='N' & type~='V');    %Posição das anotações encontradas
+[row_qrs,col_qrs] = find(type~='+');    %Posição das anotações encontradas desconsiderar "non-beat annotations"
 qrs_ann = ann(row_qrs); %Vetor com as posições de instante das anotações
 qrs_ann_t = qrs_ann*Ts; % Vetor com a poosição temporal das anotações de pico R
 qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
-ecg = ecgs(1:N,1);% - mean(ecgs(1:N,1)); % NÃO ENTENDI (ROBERTO)
+% Caso seja necessário um pré-processamento no sinal 
+ecg = ecgs(1:N,1);
 
 %% Implementação do filtro passa-baixas
 
@@ -261,21 +242,15 @@ end
 % ref.: The Accuracy on the Common Pan-Tompkins Based QRS Detection Methods Through Low-Quality Electrocardiogram Database
 % Chengyu Liu et. al.
 % obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
-tolerancia = 100e-3; % [s]
+tolerancia = 50e-3; % [s]
 
-% Contadores de falsos eventos
-TP = 0; % True positive
-FP = 0; % False positive
-TN = 0; % True negative
-FN = 0; % False positive
-
-% Criação de um vetor com a posição temporal dos eventos baseado no vetor de posição intantânea dos mesmos (eventos)
-t_eventos  = zeros(evento_cont,1);
+% Criação de um vetor com a posição temporal dos eventos (baseado no vetor eventos)
+eventos_tpos  = zeros(evento_cont,1);
 % Inicializando o segundo contador para atribuição do instante
 k2 = 1;
 for k1 = 1:size(eventos,1)
     if ~isnan(eventos(k1)) % Toda vez que o elemento não for NaN
-        t_eventos(k2) = k1*Ts;
+        eventos_tpos(k2) = k1*Ts;
         k2 = k2 + 1;
     end
 end
@@ -290,44 +265,48 @@ for k1 = 1:size(qrs_comparativo,1)
     janela_tol(k1,2) = qrs_comparativo(k1) + tolerancia; % Extremo superior de  tolerância para o evento 
 end
 
+% Vetor para determinar os falsos positivos 
+% NaN: não há intervalo associado ao evento
+% 1: há intervalo associado ao evento
+fp_eventos = NaN(size(eventos_tpos,1),1);
+
 % Vetor para determinar os falsos negativos 
 % NaN: não há evento associado ao intervalo
 % 1: há evento associado ao intervalo
 fn_eventos = NaN(size(janela_tol,1),1);
 
-% Vetor para determinar os falsos positivos 
-% NaN: não há intervalo associado ao evento
-% 1: há intervalo associado ao evento
-fp_eventos = NaN(size(janela_tol,1),1);
-
 % Falsos positivos (checar se cada evento está abrigado em um intervalo)
-for k1 = 1:size(t_eventos,1)
+for k1 = 1:size(eventos_tpos,1)
     for k2 = 1:size(janela_tol,1) 
-        if (t_eventos(k1) > janela_tol(k2,1) && t_eventos(k1) < janela_tol(k2,2))
+        if (eventos_tpos(k1) > janela_tol(k2,1) && eventos_tpos(k1) < janela_tol(k2,2))
             % Associar evento ao seu intervalo
             fp_eventos(k1) = 1;
         end
     end
 end
-% Cálculo da quantidade de falsos negativos 
-FP = size(fp_eventos,1) - sum(fp_eventos,'omitnan');
+% Cálculo da quantidade de falsos positivos 
+FP = size(fp_eventos,1) - sum(fp_eventos,'omitnan'); % False positive
+% Cálculo da quantidade de verdadeiros positivos
+TP = size(fp_eventos,1) - FP; % True positive
 
 % Falsos negativos (checar se cada intervalo abriga um evento)
 for k1 = 1:size(janela_tol,1) 
-    for k2 = 1:size(t_eventos,1)
-        if (t_eventos(k2) > janela_tol(k1,1) && t_eventos(k2) < janela_tol(k1,2))
+    for k2 = 1:size(eventos_tpos,1)
+        if (eventos_tpos(k2) > janela_tol(k1,1) && eventos_tpos(k2) < janela_tol(k1,2))
             % Associar evento ao seu intervalo
             fn_eventos(k1) = 1;
         end
     end
 end
 % Cálculo da quantidade de falsos negativos 
-FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan');
+FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan'); % False negative
+% Cálculo da quantidade de verdadeiros negativos 
+TN = size(fn_eventos,1) - FN; % True negative
 
 
 %% Plot comparativo com seleção do período QRS
 
-ann_number = 100;
+ann_number = 40;
 t1 = ann(ann_number,1);
 t2 = ann(ann_number+3,1);
 

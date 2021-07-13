@@ -39,7 +39,7 @@ close all
 
 %% Load do sinal no espaço de trabalho
 
-n =118;
+n =117;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -71,12 +71,12 @@ drawnow;
 
 %type = ['A';'B';'V';'N';'A';'B'] % TESTE
 %ann = [1;2;3;4;5;6]% TESTE
-[row_qrs,col_qrs] = find(type~='N' & type~='V');    %Posição das anotações encontradas
+[row_qrs,col_qrs] = find(type~='+');    %Posição das anotações encontradas desconsiderar "non-beat annotations"
 qrs_ann = ann(row_qrs); %Vetor com as posições de instante das anotações
 qrs_ann_t = qrs_ann*Ts; % Vetor com a poosição temporal das anotações de pico R
 qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
-ecg = ecgs(1:N,1);% - mean(ecgs(1:N,1)); % NÃO ENTENDI (ROBERTO)
+ecg = -1*ecgs(1:N,1);% - mean(ecgs(1:N,1)); % NÃO ENTENDI (ROBERTO)
 
 %% Implementação do filtro passa-baixas
 
@@ -137,7 +137,7 @@ ecg_int = conv(ecg_square,int_mask,'same');
 
 % Definicão da matriz de eventos
 % tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
-eventos = NaN(size(ecg_int,1)+1,1);
+eventos = NaN(size(ecg_int));
 
 % Sinal pré-processado
 ecg_pp = ecg_int;
@@ -254,12 +254,14 @@ for k1 = (N_treino+1):size(ecg_pp,1)
     
 end
 
+% O código não está detectando o último evento (culpa do atraso talvez)
+
 %% Deteção de falsos eventos 
 % Serão comparados os eventos com uma janela de tolerância igual a 50ms
 % ref.: The Accuracy on the Common Pan-Tompkins Based QRS Detection Methods Through Low-Quality Electrocardiogram Database
 % Chengyu Liu et. al.
 % obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
-tolerancia = 100e-3; % [s]
+tolerancia = 50e-3; % [s]
 
 % Contadores de falsos eventos
 TP = 0; % True positive
@@ -267,13 +269,13 @@ FP = 0; % False positive
 TN = 0; % True negative
 FN = 0; % False positive
 
-% Criação de um vetor com a posição temporal dos eventos baseado no vetor de posição intantânea dos mesmos (eventos)
-t_eventos  = zeros(evento_cont,1);
+% Criação de um vetor com a posição temporal dos eventos (baseado no vetor eventos)
+eventos_tpos  = zeros(evento_cont,1);
 % Inicializando o segundo contador para atribuição do instante
 k2 = 1;
 for k1 = 1:size(eventos,1)
     if ~isnan(eventos(k1)) % Toda vez que o elemento não for NaN
-        t_eventos(k2) = k1*Ts;
+        eventos_tpos(k2) = k1*Ts;
         k2 = k2 + 1;
     end
 end
@@ -288,45 +290,44 @@ for k1 = 1:size(qrs_comparativo,1)
     janela_tol(k1,2) = qrs_comparativo(k1) + tolerancia; % Extremo superior de  tolerância para o evento 
 end
 
+% Vetor para determinar os falsos positivos 
+% NaN: não há intervalo associado ao evento
+% 1: há intervalo associado ao evento
+fp_eventos = NaN(size(eventos_tpos,1),1);
+
 % Vetor para determinar os falsos negativos 
 % NaN: não há evento associado ao intervalo
 % 1: há evento associado ao intervalo
 fn_eventos = NaN(size(janela_tol,1),1);
 
-% Falso positivos (olhando sempre o intervalo refratário seguinte*)
-% Condicional de falso positivo para o primeiro evento*
-if (t_eventos(1) < t_eventos(1,1)) 
-    fprintf('falso positivo \n');
-    disp(1)
-    FP = FP + 1; % Incrementação do contador de falso positivos
-end
-% Outros eventos
-for k1 = 1:size(janela_tol,1)
-    for k2 = 1:size(t_eventos,1)
-        if (t_eventos(k2) > janela_tol(k1,2) && t_eventos(k2) < janela_tol(k1+1,1)) 
-            fprintf('falso positivo \n');
-            disp(k2)
-            FP = FP + 1; % Incrementação do contador de falso positivos
+% Falsos positivos (checar se cada evento está abrigado em um intervalo)
+for k1 = 1:size(eventos_tpos,1)
+    for k2 = 1:size(janela_tol,1) 
+        if (eventos_tpos(k1) > janela_tol(k2,1) && eventos_tpos(k1) < janela_tol(k2,2))
+            % Associar evento ao seu intervalo
+            fp_eventos(k1) = 1;
         end
     end
 end
+% Cálculo da quantidade de falsos negativos 
+FP = size(fp_eventos,1) - sum(fp_eventos,'omitnan'); % False positive
 
-% % Falsos negativos (checar se cada intervalo abriga um evento)
+% Falsos negativos (checar se cada intervalo abriga um evento)
 for k1 = 1:size(janela_tol,1) 
-    for k2 = 1:size(t_eventos,1)
-        if (t_eventos(k2) > janela_tol(k1,1) && t_eventos(k2) < janela_tol(k1,2))
+    for k2 = 1:size(eventos_tpos,1)
+        if (eventos_tpos(k2) > janela_tol(k1,1) && eventos_tpos(k2) < janela_tol(k1,2))
             % Associar evento ao seu intervalo
             fn_eventos(k1) = 1;
         end
     end
 end
 % Cálculo da quantidade de falsos negativos 
-FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan');
+FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan'); % False negative
 
 
 %% Plot comparativo com seleção do período QRS
 
-ann_number = 100;
+ann_number = 40;
 t1 = ann(ann_number,1);
 t2 = ann(ann_number+3,1);
 
