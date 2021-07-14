@@ -21,7 +21,7 @@ close all
 %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.  
 
-n =112;
+n =119;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -57,7 +57,8 @@ qrs_ann_t = qrs_ann*Ts; % Vetor com a poosição temporal das anotações de pico R
 qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
 % Caso seja necessário um pré-processamento no sinal 
-ecg = ecgs(1:N,1)/max(abs(ecgs));
+% Normalização no caso
+ecg = ecgs(1:N,1)/max(abs(ecgs(1:N,1)));
 
 %% Implementação do filtro passa-baixas
 
@@ -169,8 +170,8 @@ THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
 % Detecção de eventos sem detecção de falsos negativos
 % Aplicação no sinal do tempo de treinamento em diante
 for k1 = (N_treino+1):size(ecg_pp,1)  
-  
-    if (ecg_pp(k1) > THRESHOLD_I1) 
+
+    if (ecg_pp(k1) > THRESHOLD_I1 && cont_above_thr < 1) 
         SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
         eventos(k1) = 1;
         cont_above_thr = cont_above_thr + 1;
@@ -209,21 +210,25 @@ for k1 = (N_treino+1):size(ecg_pp,1)
     else  
         
         NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
-        eventos(k1-(cont_above_thr-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
-        cont_above_thr = 0;
-        
+        %eventos(k1-(cont_above_thr-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
+        %cont_above_thr = 0; 
     end
-          
+    
+    cont_above_thr_sb = 0;
+    % Searchback
     % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
     if (RR_intervalo > 1.66*RR_AVERAGE2 && evento_cont > 1) 
         % A segunda parte da condicional indica que agora sim trata-se de uma diferença RR
         fprintf('searchback \n');      
         for k2 = RR_temp2:k1
-            if(ecg_pp(k2) > THRESHOLD_I2)
+            if(ecg_pp(k2) > THRESHOLD_I2 && cont_above_thr_sb < 1) 
+                % A segunda condicional garante que só o disparo do pico R vai ser anotado
                 % Instante recebe deteção de evento baseado em THRESHOLD_I2, mas nada é atualizado pois esse é um outlier
                 eventos(k2) = 1;
+                cont_above_thr_sb = cont_above_thr_sb + 1;
             end
         end
+        cont_above_thr_sb = 0;
     end
 
     % Atualização do temporário 2 (atrasada par autilização no if anterior) 
@@ -302,6 +307,30 @@ end
 FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan'); % False negative
 % Cálculo da quantidade de verdadeiros negativos 
 TN = size(fn_eventos,1) - FN; % True negative
+
+
+%% Cálculo das métricas
+% Colocar as métricas em uma table e associar os valores calculados inicialmente a vetores, uma vez pra cada sinal
+
+Sinal = n;
+Media = mean(ecgs(1:N,1));
+DP = std(ecgs(1:N,1));
+Media_norm = mean(ecg);
+DP_norm = std(ecgs(1:N,1));
+Nv = size(qrs_comparativo,1);
+Nd = evento_cont;
+FP_T = FP;
+p_FP = (FP/Nv)*100;
+FN_T = FN;
+p_FN = (FN/Nv)*100;
+
+% Relacionados ao IRR
+% Criação de um vetor com os intervalor RR
+IRR = diff(qrs_comparativo);
+Media_IRR = mean(IRR);
+DP_IRR = std(IRR);
+
+T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN_T, p_FN, Media_IRR, DP_IRR);
 
 
 %% Plot comparativo com seleção do período QRS

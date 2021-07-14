@@ -21,7 +21,7 @@ close all
 %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.  
 
-n =119;
+n =118;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -170,14 +170,17 @@ THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
 % Detecção de eventos sem detecção de falsos negativos
 % Aplicação no sinal do tempo de treinamento em diante
 for k1 = (N_treino+1):size(ecg_pp,1)  
-  
+
     if (ecg_pp(k1) > THRESHOLD_I1) 
         SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
-        eventos(k1) = 1;
+        
+        % Marcação apenas do disparo do pico R
+        if(cont_above_thr < 1) 
+            eventos(k1) = 1;
+        end
         cont_above_thr = cont_above_thr + 1;
         
         if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
-            
             % Incremento de ocorrência de evento
             evento_cont = evento_cont + 1;
             
@@ -185,15 +188,13 @@ for k1 = (N_treino+1):size(ecg_pp,1)
 
             % Cálculo do intervalo RR
             RR_intervalo = (RR_temp1-RR_temp2)*Ts; % em segundos já
-            
-           
+
             if (evento_cont > 1) % Para que se tenha realmente uma diferença temporal entre picos R-R 
                 % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
                 RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
                 RR_AVERAGE1_ARRAY(end) = RR_intervalo; % Associando a diferença de tempo
                 % Cálculo da média considerando apenas os elementos não nulos
                 RR_AVERAGE1 = sum(RR_AVERAGE1_ARRAY)/nnz(RR_AVERAGE1_ARRAY);% mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
-
 
                 % No inicio todos são nulos, então deve haver um push inicial para esse caso
                 if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
@@ -208,13 +209,12 @@ for k1 = (N_treino+1):size(ecg_pp,1)
             end           
         end       
     else  
-        
         NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
-        eventos(k1-(cont_above_thr-1):k1) = NaN; % Atribuindo NaN a todos os instantes do evento integrado, menos o primeiro (disparo)
-        cont_above_thr = 0;
-        
+        % Significa que acabou a zona acima do thr gerada pela integração, logo deve-se zerar o contador de anotações acima do thr
+        cont_above_thr = 0; 
     end
     
+    % Contador de anotações acima do thr geradas pela integração
     cont_above_thr_sb = 0;
     % Searchback
     % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
@@ -307,6 +307,7 @@ FN = size(fn_eventos,1) - sum(fn_eventos,'omitnan'); % False negative
 % Cálculo da quantidade de verdadeiros negativos 
 TN = size(fn_eventos,1) - FN; % True negative
 
+
 %% Cálculo das métricas
 % Colocar as métricas em uma table e associar os valores calculados inicialmente a vetores, uma vez pra cada sinal
 
@@ -329,6 +330,7 @@ Media_IRR = mean(IRR);
 DP_IRR = std(IRR);
 
 T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN_T, p_FN, Media_IRR, DP_IRR);
+
 
 %% Plot comparativo com seleção do período QRS
 
