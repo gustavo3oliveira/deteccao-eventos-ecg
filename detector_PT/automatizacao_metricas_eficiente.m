@@ -334,6 +334,9 @@ end
 % Associação dos vetores as posições da tabela 
 T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN_T, p_FN, Media_IRR, DP_IRR);
 
+% Salvar em xlsx para facilitar a conversão para LaTex table
+% writetable(T_metricas,'tabela_metricas.xlsx');
+
 
 
 
