@@ -77,15 +77,63 @@ for k0 = 1:size(n_sinais,1)
     a_l = 32*[1 -2 1];
     ecg_l = filter(b_l,a_l,ecg);
 
+    % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+    % fc = 11; % [Hz]
+    % 
+    % [b_l,a_l] = butter(12,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+    % ecg_l = filter(b_h,a_h,ecg);
+
     %% Implementação do filtro passa-altas
 
-    b_h = zeros(1,33);
-    b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
-    a_h = 32*[1 -1];
-    % Resultado filtrado em um passa banda (band-pass)
+    % b_h = zeros(1,33);
+    % b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
+    % a_h = 32*[1 -1];
+    % % Resultado filtrado em um passa banda (band-pass)
+    % ecg_bp = filter(b_h,a_h,ecg_l);
+
+    % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+    % Definição das frequências
+    fc = 2.75; % [Hz] 3 para o sinal 119
+
+    [b_h,a_h] = butter(2,fc/(Fs/2),'high'); % Utiliza a frequência de corte normalizada (a ordem afeta muito o resultado)
     ecg_bp = filter(b_h,a_h,ecg_l);
+    % Quanto menor a ordem, menor o atrado e menor a oscilação no sinal filtrado
 
     % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
+
+    %% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
+
+    % obs.: O filtro foi originalmente projetado em uma fs = 200 Hz (diferente da utilizada aqui, atenção na analise da resp. freq.)
+    % Para mais detalher, ver o artigo corrigido pelo Tompkins
+    fs = 200;
+
+    % PASSA-BAIXA
+    % Busca pela frequência de corte
+    [h,w_Norm_l] = freqz(b_l,a_l,2048);
+    mag = 20*log10(abs(h));
+    w_piNorm_h = w_Norm_l/pi; % normalizada por pi
+    for k1 = 1:size(mag,1)
+        if (mag(k1) <= -3)
+            break
+        end
+    end
+    % Determinação da frequencia do LP
+    cutoff_freq_Norm = w_Norm_l(k1)/pi;
+    cutoff_freq_l = cutoff_freq_Norm*fs/2;
+
+    % PASSA-ALTA
+    % Busca pela frequência de corte
+    [h,w_Norm_h] = freqz(b_h,a_h,2048);
+    mag = 20*log10(abs(h));
+    w_piNorm_h = w_Norm_h/pi; % normalizada por pi
+    for k1 = 1:size(mag,1)
+        if (mag(k1) >= -3)
+            break
+        end
+    end
+    % Determinação da frequencia do HP
+    cutoff_freq_Norm_h = w_Norm_h(k1)/pi;
+    cutoff_freq_h = cutoff_freq_Norm_h*Fs/2;
 
     %% Derivação
 
@@ -118,136 +166,137 @@ for k0 = 1:size(n_sinais,1)
 
     %% Algoritmo de Pan-Tompkins
 
-% Definicão da matriz de eventos
-% tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
-eventos = NaN(size(ecg_int));
+    % Definicão da matriz de eventos
+    % tamanho exagerado, reberá o valor 1 na posição vetorial equivalente ao instante de tempo em que ocorrer um evento. 
+    eventos = NaN(size(ecg_int));
 
-% Sinal pré-processado
-ecg_pp = ecg_int;
+    % Sinal pré-processado
+    ecg_pp = ecg_int;
 
-% Vetores de média
-RR_AVERAGE1_ARRAY = zeros(8,1);
-RR_AVERAGE2_ARRAY = zeros(8,1);
+    % Vetores de média
+    RR_AVERAGE1_ARRAY = zeros(8,1);
+    RR_AVERAGE2_ARRAY = zeros(8,1);
 
-% Medias
-RR_AVERAGE1 = 0;
-RR_AVERAGE2 = 0;
+    % Medias
+    RR_AVERAGE1 = 0;
+    RR_AVERAGE2 = 0;
 
-% Limites
-RR_LOW_LIMIT = 0;
-RR_HIGH_LIMIT = 0;
+    % Limites
+    RR_LOW_LIMIT = 0;
+    RR_HIGH_LIMIT = 0;
 
-% Indicadores temporais temporários de eventos 
-RR_temp1 = 0;
-RR_temp2 = 0;
-% obs.: RR_ind1 e RR_ind2 devem ir se alternando para 
+    % Indicadores temporais temporários de eventos 
+    RR_temp1 = 0;
+    RR_temp2 = 0;
+    % obs.: RR_ind1 e RR_ind2 devem ir se alternando para 
 
-% Tamano do intervalo RR [s]
-RR_intervalo = 0;
+    % Tamano do intervalo RR [s]
+    RR_intervalo = 0;
 
-% Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
-N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
+    % Inicializando o limiares, utilizando o primeiro 1 segundo de dados (treinamento do algoritmo)
+    N_treino = Fs; % Número de amostras em um segundo (tempo normalmente utilizado para treinar o algoritmo)
 
-% Pico de sinal
-SPKI = max(ecg_pp(1:N_treino));
+    % Pico de sinal
+    SPKI = max(ecg_pp(1:N_treino));
 
-% Pico de ruído
-NPKI = 0;
+    % Pico de ruído
+    NPKI = 0;
 
-% Inicializando o contador de pontos acima do threshold em um evento integrado
-% Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
-% A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
-cont_above_thr = 0;
+    % Inicializando o contador de pontos acima do threshold em um evento integrado
+    % Lembrando que o único ponto que nos interessa é o disparo, o instante inicial do evento com ecg_pp(k1) > THRESHOLD_I1
+    % A integração cria um evento mais longo que o pico R (ver Rangayyan pg. 190)
+    cont_above_thr = 0;
 
-% Número de eventos total
-evento_cont = 0;
+    % Número de eventos total
+    evento_cont = 0;
 
-THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
-THRESHOLD_I2 = 0.5*THRESHOLD_I1;
-
-THRESHOLD_I1_fn = NPKI + 0.25*(SPKI - NPKI);
-THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
-
-% Detecção de eventos sem detecção de falsos negativos
-% Aplicação no sinal do tempo de treinamento em diante
-for k1 = (N_treino+1):size(ecg_pp,1)  
-
-    if (ecg_pp(k1) > THRESHOLD_I1) 
-        SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
-        
-        % Marcação apenas do disparo do pico R
-        if(cont_above_thr < 1) 
-            eventos(k1) = 1;
-        end
-        cont_above_thr = cont_above_thr + 1;
-        
-        if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
-            % Incremento de ocorrência de evento
-            evento_cont = evento_cont + 1;
-            
-            RR_temp1 = k1; % associando o instante de tempo inferior
-
-            % Cálculo do intervalo RR
-            RR_intervalo = (RR_temp1-RR_temp2)*Ts; % em segundos já
-
-            if (evento_cont > 1) % Para que se tenha realmente uma diferença temporal entre picos R-R 
-                % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
-                RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
-                RR_AVERAGE1_ARRAY(end) = RR_intervalo; % Associando a diferença de tempo
-                % Cálculo da média considerando apenas os elementos não nulos
-                RR_AVERAGE1 = sum(RR_AVERAGE1_ARRAY)/nnz(RR_AVERAGE1_ARRAY);% mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
-
-                % No inicio todos são nulos, então deve haver um push inicial para esse caso
-                if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
-                    RR_AVERAGE2_ARRAY(1:end-1) = RR_AVERAGE2_ARRAY(2:end);
-                    RR_AVERAGE2_ARRAY(end) = RR_AVERAGE1; % RR_AVERAGE2_ARRAY recebe o mesmo intervalo RR calculado para RR_AVERAGE1
-                    % Cálculo da média considerando apenas os elementos não nulos
-                    RR_AVERAGE2 = sum(RR_AVERAGE2_ARRAY)/nnz(RR_AVERAGE2_ARRAY); % Cálculo da média 2
-                    % Recalculando os limites 
-                    RR_LOW_LIMIT = 0.92*RR_AVERAGE2;
-                    RR_HIGH_LIMIT = 1.16*RR_AVERAGE2;
-                end
-            end           
-        end       
-    else  
-        NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
-        % Significa que acabou a zona acima do thr gerada pela integração, logo deve-se zerar o contador de anotações acima do thr
-        cont_above_thr = 0; 
-    end
-    
-    % Contador de anotações acima do thr geradas pela integração
-    cont_above_thr_sb = 0;
-    % Searchback
-    % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
-    if (RR_intervalo > 1.66*RR_AVERAGE2 && evento_cont > 1) 
-        % A segunda parte da condicional indica que agora sim trata-se de uma diferença RR
-        fprintf('searchback \n');      
-        for k2 = RR_temp2:k1
-            if(ecg_pp(k2) > THRESHOLD_I2 && cont_above_thr_sb < 1) 
-                % A segunda condicional garante que só o disparo do pico R vai ser anotado
-                % Instante recebe deteção de evento baseado em THRESHOLD_I2, mas nada é atualizado pois esse é um outlier
-                eventos(k2) = 1;
-                cont_above_thr_sb = cont_above_thr_sb + 1;
-            end
-        end
-        cont_above_thr_sb = 0;
-    end
-
-    % Atualização do temporário 2 (atrasada par autilização no if anterior) 
-    RR_temp2 = RR_temp1;
-   
-    % Atualizar os thresholds
     THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
     THRESHOLD_I2 = 0.5*THRESHOLD_I1;
-    
-end
+
+    THRESHOLD_I1_fn = NPKI + 0.25*(SPKI - NPKI);
+    THRESHOLD_I2_fn = 0.5*THRESHOLD_I1;
+
+    % Detecção de eventos sem detecção de falsos negativos
+    % Aplicação no sinal do tempo de treinamento em diante
+    for k1 = (N_treino+1):size(ecg_pp,1)  
+
+        if (ecg_pp(k1) > THRESHOLD_I1) 
+            SPKI = 0.125*ecg_pp(k1) + 0.875*SPKI; 
+
+            % Marcação apenas do disparo do pico R
+            if(cont_above_thr < 1) 
+                eventos(k1) = 1;
+            end
+            cont_above_thr = cont_above_thr + 1;
+
+            if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
+                % Incremento de ocorrência de evento
+                evento_cont = evento_cont + 1;
+
+                RR_temp1 = k1; % associando o instante de tempo inferior
+
+                % Cálculo do intervalo RR
+                RR_intervalo = (RR_temp1-RR_temp2)*Ts; % em segundos já
+
+                if (evento_cont > 1) % Para que se tenha realmente uma diferença temporal entre picos R-R 
+                    % Guardando o tamanho do intervalo no vetor antes de zerar (método de array push-remove)
+                    RR_AVERAGE1_ARRAY(1:end-1) = RR_AVERAGE1_ARRAY(2:end);
+                    RR_AVERAGE1_ARRAY(end) = RR_intervalo; % Associando a diferença de tempo
+                    % Cálculo da média considerando apenas os elementos não nulos
+                    RR_AVERAGE1 = sum(RR_AVERAGE1_ARRAY)/nnz(RR_AVERAGE1_ARRAY);% mean(RR_AVERAGE1_ARRAY); % Cálculo da média 1
+
+                    % No inicio todos são nulos, então deve haver um push inicial para esse caso
+                    if (all(~RR_AVERAGE2_ARRAY) || (RR_AVERAGE1 > RR_LOW_LIMIT && RR_AVERAGE1 < RR_HIGH_LIMIT))
+                        RR_AVERAGE2_ARRAY(1:end-1) = RR_AVERAGE2_ARRAY(2:end);
+                        RR_AVERAGE2_ARRAY(end) = RR_AVERAGE1; % RR_AVERAGE2_ARRAY recebe o mesmo intervalo RR calculado para RR_AVERAGE1
+                        % Cálculo da média considerando apenas os elementos não nulos
+                        RR_AVERAGE2 = sum(RR_AVERAGE2_ARRAY)/nnz(RR_AVERAGE2_ARRAY); % Cálculo da média 2
+                        % Recalculando os limites 
+                        RR_LOW_LIMIT = 0.92*RR_AVERAGE2;
+                        RR_HIGH_LIMIT = 1.16*RR_AVERAGE2;
+                    end
+                end           
+            end       
+        else  
+            NPKI = 0.125*ecg_pp(k1) + 0.875*NPKI;
+            % Significa que acabou a zona acima do thr gerada pela integração, logo deve-se zerar o contador de anotações acima do thr
+            cont_above_thr = 0; 
+        end
+
+        % Contador de anotações acima do thr geradas pela integração
+        cont_above_thr_sb = 0;
+        % Searchback
+        % Checando se o intervalo RR calculado na iteração atual ultrapassa o limite RR_MISSED_LIMIT = 166%RR_AVERAGE2
+        if (RR_intervalo > 1.66*RR_AVERAGE2 && evento_cont > 1) 
+            % A segunda parte da condicional indica que agora sim trata-se de uma diferença RR
+            fprintf('searchback \n');      
+            for k2 = RR_temp2:k1
+                if(ecg_pp(k2) > THRESHOLD_I2 && cont_above_thr_sb < 1) 
+                    % A segunda condicional garante que só o disparo do pico R vai ser anotado
+                    % Instante recebe deteção de evento baseado em THRESHOLD_I2, mas nada é atualizado pois esse é um outlier
+                    eventos(k2) = 1;
+                    cont_above_thr_sb = cont_above_thr_sb + 1;
+                end
+            end
+            cont_above_thr_sb = 0;
+        end
+
+        % Atualização do temporário 2 (atrasada par autilização no if anterior) 
+        RR_temp2 = RR_temp1;
+
+        % Atualizar os thresholds
+        THRESHOLD_I1 = NPKI + 0.25*(SPKI - NPKI);
+        THRESHOLD_I2 = 0.5*THRESHOLD_I1;
+
+    end
 
     %% Deteção de falsos eventos 
     % Serão comparados os eventos com uma janela de tolerância igual a 50ms
     % ref.: The Accuracy on the Common Pan-Tompkins Based QRS Detection Methods Through Low-Quality Electrocardiogram Database
     % Chengyu Liu et. al.
     % obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
-    tolerancia = 50e-3; % [s]
+    % obs2.: O Butterworth implementado com a função butter insere um atraso maior logo, usar 100ms de cada lado da janela
+    tolerancia = 100e-3; % [s]
 
     % Criação de um vetor com a posição temporal dos eventos (baseado no vetor eventos)
     eventos_tpos  = zeros(evento_cont,1);
@@ -335,7 +384,7 @@ end
 T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN_T, p_FN, Media_IRR, DP_IRR);
 
 % Salvar em xlsx para facilitar a conversão para LaTex table
-% writetable(T_metricas,'tabela_metricas.xlsx');
+%writetable(T_metricas,'tabela_metricas.xlsx');
 
 
 

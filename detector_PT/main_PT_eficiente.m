@@ -67,24 +67,97 @@ b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
 a_l = 32*[1 -2 1];
 ecg_l = filter(b_l,a_l,ecg);
 
+% Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+% fc = 11; % [Hz]
+% 
+% [b_l,a_l] = butter(12,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+% ecg_l = filter(b_h,a_h,ecg);
+
 %% Implementação do filtro passa-altas
 
-b_h = zeros(1,33);
-b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
-a_h = 32*[1 -1];
-% Resultado filtrado em um passa banda (band-pass)
+% b_h = zeros(1,33);
+% b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
+% a_h = 32*[1 -1];
+% % Resultado filtrado em um passa banda (band-pass)
+% ecg_bp = filter(b_h,a_h,ecg_l);
+
+% Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+% Definição das frequências
+fc = 2.75; % [Hz] 3 para o sinal 119
+
+[b_h,a_h] = butter(2,fc/(Fs/2),'high'); % Utiliza a frequência de corte normalizada (a ordem afeta muito o resultado)
 ecg_bp = filter(b_h,a_h,ecg_l);
+% Quanto menor a ordem, menor o atrado e menor a oscilação no sinal filtrado
 
 % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
 
 %% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
+
+% obs.: O filtro foi originalmente projetado em uma fs = 200 Hz (diferente da utilizada aqui, atenção na analise da resp. freq.)
+% Para mais detalher, ver o artigo corrigido pelo Tompkins
+fs = 200;
+
+% PASSA-BAIXA
 figure;
 freqz(b_l,a_l)
 title('Resposta em frequência do filtro passa-baixas')
 
+% Busca pela frequência de corte
+[h,w_Norm_l] = freqz(b_l,a_l,2048);
+mag = 20*log10(abs(h));
+w_piNorm_h = w_Norm_l/pi; % normalizada por pi
+for k1 = 1:size(mag,1)
+    if (mag(k1) <= -3)
+        break
+    end
+end
+% Determinação da frequencia do LP
+cutoff_freq_Norm = w_Norm_l(k1)/pi;
+cutoff_freq_l = cutoff_freq_Norm*fs/2;
+
+figure()
+plot(w_piNorm_h(k1),mag(k1),'*',w_piNorm_h,mag)
+grid minor
+ax = gca;
+ax.YLim = [-100 20];
+ax.XTick = 0:.5:2;
+xlabel('Normalized Frequency (\times\pi rad/sample)')
+ylabel('Magnitude (dB)')
+
+% Apresentação da TF projetada pelo MATLAB no domínio z
+% *Specify discrete transfer functions in DSP format
+lp_z = filt(b_l,a_l,1/fs)
+
+% PASSA-ALTA
 figure;
 freqz(b_h,a_h)
 title('Resposta em frequência do filtro passa-altas')
+
+% Busca pela frequência de corte
+[h,w_Norm_h] = freqz(b_h,a_h,2048);
+mag = 20*log10(abs(h));
+w_piNorm_h = w_Norm_h/pi; % normalizada por pi
+for k1 = 1:size(mag,1)
+    if (mag(k1) >= -3)
+        break
+    end
+end
+% Determinação da frequencia do HP
+cutoff_freq_Norm_h = w_Norm_h(k1)/pi;
+cutoff_freq_h = cutoff_freq_Norm_h*Fs/2;
+
+figure()
+plot(w_piNorm_h(k1),mag(k1),'*',w_piNorm_h,mag)
+grid minor
+ax = gca;
+ax.YLim = [-100 20];
+ax.XTick = 0:.5:2;
+xlabel('Normalized Frequency (\times\pi rad/sample)')
+ylabel('Magnitude (dB)')
+
+% Apresentação da TF projetada pelo MATLAB no domínio z
+% *Specify discrete transfer functions in DSP format
+hp_z = filt(b_h,a_h,1/fs)
 
 %% Derivação
 
@@ -176,11 +249,11 @@ for k1 = (N_treino+1):size(ecg_pp,1)
         
         % Marcação apenas do disparo do pico R
         if(cont_above_thr < 1) 
-            eventos(k1) = 1;
+            eventos(k1) = ecg(k1); % Atribuindo a intensidade para a marcação
         end
         cont_above_thr = cont_above_thr + 1;
         
-        if(eventos(k1) == 1 && isnan(eventos(k1-1))) % Contador zerado a cada novo evento
+        if(~isnan(eventos(k1)) && isnan(eventos(k1-1))) % Contador zerado a cada novo evento ~isnan(eventos(k1))
             % Incremento de ocorrência de evento
             evento_cont = evento_cont + 1;
             
@@ -225,7 +298,7 @@ for k1 = (N_treino+1):size(ecg_pp,1)
             if(ecg_pp(k2) > THRESHOLD_I2 && cont_above_thr_sb < 1) 
                 % A segunda condicional garante que só o disparo do pico R vai ser anotado
                 % Instante recebe deteção de evento baseado em THRESHOLD_I2, mas nada é atualizado pois esse é um outlier
-                eventos(k2) = 1;
+                eventos(k2) = ecg(k2); % Atribuindo a intensidade para a marcação
                 cont_above_thr_sb = cont_above_thr_sb + 1;
             end
         end
@@ -246,7 +319,8 @@ end
 % ref.: The Accuracy on the Common Pan-Tompkins Based QRS Detection Methods Through Low-Quality Electrocardiogram Database
 % Chengyu Liu et. al.
 % obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
-tolerancia = 50e-3; % [s]
+% obs2.: O Butterworth implementado com a função butter insere um atraso maior logo, usar 100ms de cada lado da janela 
+tolerancia = 100e-3; % [s]
 
 % Criação de um vetor com a posição temporal dos eventos (baseado no vetor eventos)
 eventos_tpos  = zeros(evento_cont,1);
