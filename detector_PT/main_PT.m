@@ -30,8 +30,14 @@ Ntypes=numel(type);     %Numero de tipos de anotação
 
 %Plot 2D version of signal and labels
 figure; 
-maxEcg1 =max(ecgs(:,1))*ones(Ntypes,1);
-subplot(2,1,1); plot(ts(1:N),ecgs(1:N,1));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 1']); hold on;
+maxEcg1 =max(ecgs(:,2))*ones(Ntypes,1);
+subplot(2,1,1); plot(ts(1:N),ecgs(1:N,2));
+
+                ylabel('mV'); xlabel('s'); 
+                grid on;
+                title([arqnum ' sinal 1']); 
+                hold on;
+                
                 plot(ts(ann(ann<N)+1),ecgs(ann(ann<N)+1),'ro');
                 text(ts(ann(ann<N)+1),maxEcg1,type);                    
 subplot(2,1,2); plot(ts(1:N),ecgs(1:N,2));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 2' ]);
@@ -39,15 +45,8 @@ drawnow;
 
 Ts = 1/Fs;
 
-%% Plot do sinal
 
-figure; 
-plot(ts(1:N),ecgs(1:N,1));
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1');    
-drawnow;
+
 
 %% Tratamento de dados 
 
@@ -58,7 +57,29 @@ qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
 % Caso seja necessário um pré-processamento no sinal 
 % Normalização no caso
-ecg = ecgs(1:N,1)/max(abs(ecgs(1:N,1)));
+ecg = ecgs(1:N,2)/max(abs(ecgs(1:N,1)));
+
+%% Plot do sinal
+
+f = figure;
+f.Position = [100 100 900 400]; 
+subplot(2,1,1); 
+plot(ts(1:N),ecgs(1:N,2));
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)');
+title('Sinal de electrocardiograma original');    
+grid on;
+subplot(2,1,2); 
+drawnow;
+plot(ts(1:N),ecg(1:N));
+ylabel('Voltagem (mV)');
+ylim([-3 3])
+xlabel('Tempo (s)');
+title('Sinal de electrocardiograma normalizado'); 
+grid on;
+drawnow;
+saveas(f,'Sinal 119 original e normalizado.png')
+
 
 %% Implementação do filtro passa-baixas
 
@@ -78,13 +99,18 @@ ecg_bp = filter(b_h,a_h,ecg_l);
 % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
 
 %% FFT Filtros, OBSERVAÇÃO DA FREQ DE CORTE, 5-11 Hz
-figure;
+f = figure;
+f.Position = [100 100 800 300]; 
 freqz(b_l,a_l)
 title('Resposta em frequência do filtro passa-baixas')
+saveas(f,'Filtro passa baixas original.png')
 
-figure;
+f = figure;
+f.Position = [100 100 800 300]; 
 freqz(b_h,a_h)
 title('Resposta em frequência do filtro passa-altas')
+saveas(f,'Filtro passa altas original.png')
+
 
 %% Derivação
 
@@ -336,7 +362,8 @@ ann_number = 40;
 t1 = ann(ann_number,1);
 t2 = ann(ann_number+3,1);
 
-figure; 
+f = figure;
+f.Position = [100 100 900 600]; 
 subplot(5,1,1); 
 plot(ts(t1:t2),ecg(t1:t2));
 ylabel('mV'); 
@@ -369,17 +396,22 @@ xlabel('s');
 grid on;
 title('Sinal ECG integrado'); 
 drawnow;
+saveas(f,'Sinal 119 Diagrama comparativo.png')
+
 
 
 %%
 % Detecção
-figure; 
+f = figure;
+f.Position = [100 100 900 300]; 
 plot(ts(1:N),ecg,ts(1:N),eventos,'r*');
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)');  
 grid on;
 title('Sinal 1 e a deteção de eventos');    
 drawnow;
+saveas(f,'Sinal 119 detecao eventos.png')
+
 % obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
 
 %%
@@ -389,87 +421,92 @@ t2 = ann(ann_number+20,1);
 qrs = ecgs(t1:t2,1);
 qrs_t = ts(t1:t2);
 
-figure; 
-subplot(2,1,1)
+f = figure;
+f.Position = [100 100 800 350]; 
 plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 e a deteção de eventos');  
-subplot(2,1,2)
-plot(ts(t1:t2),ecg(t1:t2),ts(t1:t2),eventos(t1:t2),'r*');
-ylabel('mV'); 
-xlabel('s'); 
-grid on;
-title('Sinal 1 e a deteção de eventos com detecção de falsos negativos'); 
-drawnow;
+title('Deteção de anotações para 20 eventos');  
+saveas(f,'Sinal 119 detecao 20 eventos.png')
+
 
 %% Plots construção
 
 % Plot filtragem
-figure; 
+f = figure;
+f.Position = [100 100 800 350]; 
 subplot(2,1,1); 
 plot(ts(1:N),ecg);
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 sem filtrar'); 
+title('Sinal de ECG normalizado sem filtrar'); 
 hold on;
 subplot(2,1,2); 
 plot(ts(1:N),ecg_bp);
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 filtrado');    
+title('Sinal de ECG normalizado e filtrado');    
 drawnow;
+saveas(f,'Sinal 119 fitrado.png')
+
 
 % Derivação
-figure() 
-subplot(2,1,1); 
+f = figure;
+f.Position = [100 100 800 350]; subplot(2,1,1); 
 plot(ts(1:N),ecg);
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)');  
 grid on;
-title('Sinal 1 sem filtrar'); 
+title('Sinal de ECG normalizado sem filtrar'); 
 hold on;
 subplot(2,1,2); 
 plot(ts(1:N),ecg_d);
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 filtrado e derivado');    
+title('Sinal de ECG normalizado, filtrado e derivado');    
 drawnow;
+saveas(f,'Sinal 119 derivado.png')
+
 
 % Squared
-figure() 
+f = figure;
+f.Position = [100 100 800 350]; 
 subplot(2,1,1); 
 plot(ts(1:N),ecg);
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 filtrado'); 
+title('Sinal de ECG normalizado sem filtrar'); 
 hold on;
 subplot(2,1,2); 
 plot(ts(1:N),ecg_square);
 ylabel('mV^2'); 
-xlabel('s'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 filtrado, derivado e squared');    
+title('Sinal de ECG filtrado, derivado e squared');    
 drawnow;
+saveas(f,'Sinal 119 squared.png')
 
 % Integrado
-figure() 
+f = figure;
+f.Position = [100 100 800 350]; 
 subplot(2,1,1); 
 plot(ts(1:N),ecg);
-ylabel('mV'); 
-xlabel('s'); 
+ylabel('Voltagem (mV)'); 
+xlabel('Tempo (s)'); 
 grid on;
-title('Sinal 1 filtrado'); 
+title('Sinal de ECG normalizado sem filtrar'); 
 hold on;
 subplot(2,1,2); 
 plot(ts(1:N),ecg_int);
 ylabel('mV^2'); 
-xlabel('s'); 
+xlabel('Tempo (s)');  
 grid on;
-title('Sinal 1 filtrado, derivado, squared e integrado');    
+title('Sinal de ECG filtrado, derivado, squared e integrado');    
 drawnow;
+saveas(f,'Sinal 119 integrado.png')
+
