@@ -72,16 +72,16 @@ for k0 = 1:size(n_sinais,1)
 
     %% Implementação do filtro passa-baixas
 
-%     b_l = zeros(1,13);
-%     b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
-%     a_l = 32*[1 -2 1];
-%     ecg_l = filter(b_l,a_l,ecg);
+    b_l = zeros(1,13);
+    b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
+    a_l = 32*[1 -2 1];
+    ecg_l = filter(b_l,a_l,ecg);
 
     % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
-    fc = 9.75; % [Hz]
-
-    [b_l,a_l] = butter(2,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
-    ecg_l = filter(b_l,a_l,ecg);
+%     fc = 9.75; % [Hz]
+% 
+%     [b_l,a_l] = butter(2,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+%     ecg_l = filter(b_l,a_l,ecg);
 
     %% Implementação do filtro passa-altas
 
@@ -384,7 +384,7 @@ end
 T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN_T, p_FN, Media_IRR, DP_IRR);
 
 % Salvar em xlsx para facilitar a conversão para LaTex table
-%writetable(T_metricas,'tabela_metricas.xlsx');
+%writetable(T_metricas,'tabela_metricas_canonico.xlsx');
 
 
 
