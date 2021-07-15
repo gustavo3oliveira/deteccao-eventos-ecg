@@ -85,19 +85,19 @@ for k0 = 1:size(n_sinais,1)
 
     %% Implementação do filtro passa-altas
 
-    b_h = zeros(1,33);
-    b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
-    a_h = 32*[1 -1];
-    % Resultado filtrado em um passa banda (band-pass)
-    ecg_bp = filter(b_h,a_h,ecg_l);
-
-%     % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
-%     % Definição das frequências
-%     fc = 4.75; % [Hz] 3 para o sinal 119 (2.75)
-% 
-%     [b_h,a_h] = butter(2,fc/(Fs/2),'high'); % Utiliza a frequência de corte normalizada (a ordem afeta muito o resultado)
+%     b_h = zeros(1,33);
+%     b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
+%     a_h = 32*[1 -1];
+%     % Resultado filtrado em um passa banda (band-pass)
 %     ecg_bp = filter(b_h,a_h,ecg_l);
-%     % Quanto menor a ordem, menor o atrado e menor a oscilação no sinal filtrado
+
+    % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+    % Definição das frequências
+    fc = 5.4; % [Hz] 3 para o sinal 119 (2.75)
+
+    [b_h,a_h] = butter(2,fc/(Fs/2),'high'); % Utiliza a frequência de corte normalizada (a ordem afeta muito o resultado)
+    ecg_bp = filter(b_h,a_h,ecg_l);
+    % Quanto menor a ordem, menor o atrado e menor a oscilação no sinal filtrado
 
     % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
 
@@ -133,7 +133,7 @@ for k0 = 1:size(n_sinais,1)
     end
     % Determinação da frequencia do HP
     cutoff_freq_Norm_h = w_Norm_h(k1)/pi;
-    cutoff_freq_h = cutoff_freq_Norm_h*fs/2;
+    cutoff_freq_h = cutoff_freq_Norm_h*Fs/2;
 
     %% Derivação
 

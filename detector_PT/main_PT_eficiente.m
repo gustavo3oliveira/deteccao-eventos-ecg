@@ -21,7 +21,7 @@ close all
 %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.  
 
-n =118;
+n = 115;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -30,7 +30,7 @@ Ntypes=numel(type);     %Numero de tipos de anotação
 
 %Plot 2D version of signal and labels
 figure; 
-maxEcg1 =max(ecgs(:,1))*ones(Ntypes,1);
+maxEcg1 =max(ecgs(:,2))*ones(Ntypes,1);
 subplot(2,1,1); plot(ts(1:N),ecgs(1:N,1));ylabel('mV'); xlabel('s'); grid on;title([arqnum ' sinal 1']); hold on;
                 plot(ts(ann(ann<N)+1),ecgs(ann(ann<N)+1),'ro');
                 text(ts(ann(ann<N)+1),maxEcg1,type);                    
@@ -42,7 +42,7 @@ Ts = 1/Fs;
 %% Plot do sinal
 
 figure; 
-plot(ts(1:N),ecgs(1:N,1));
+plot(ts(1:N),ecgs(1:N,2));
 ylabel('mV'); 
 xlabel('s'); 
 grid on;
@@ -58,36 +58,36 @@ qrs_type = type(row_qrs,1); %Vetor com as etiquetas das anotações
 
 % Caso seja necessário um pré-processamento no sinal 
 % Normalização no caso
-ecg = ecgs(1:N,1)/max(abs(ecgs(1:N,1)));
+ecg = ecgs(1:N,2)/max(abs(ecgs(1:N,2)));
 
 %% Implementação do filtro passa-baixas
 
-b_l = zeros(1,13);
-b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
-a_l = 32*[1 -2 1];
-ecg_l = filter(b_l,a_l,ecg);
+% b_l = zeros(1,13);
+% b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
+% a_l = 32*[1 -2 1];
+% ecg_l = filter(b_l,a_l,ecg);
 
 % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
-% fc = 11; % [Hz]
-% 
-% [b_l,a_l] = butter(12,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
-% ecg_l = filter(b_h,a_h,ecg);
+fc = 9.75; % [Hz]
+
+[b_l,a_l] = butter(3,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+ecg_l = filter(b_l,a_l,ecg);
 
 %% Implementação do filtro passa-altas
 
-% b_h = zeros(1,33);
-% b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
-% a_h = 32*[1 -1];
-% % Resultado filtrado em um passa banda (band-pass)
-% ecg_bp = filter(b_h,a_h,ecg_l);
-
-% Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
-% Definição das frequências
-fc = 2.75; % [Hz] 3 para o sinal 119
-
-[b_h,a_h] = butter(2,fc/(Fs/2),'high'); % Utiliza a frequência de corte normalizada (a ordem afeta muito o resultado)
+b_h = zeros(1,33);
+b_h(1) = -1; b_h(17) = 32; b_h(18)= -32 ; b_h(33) = 1;
+a_h = 32*[1 -1];
+% Resultado filtrado em um passa banda (band-pass)
 ecg_bp = filter(b_h,a_h,ecg_l);
-% Quanto menor a ordem, menor o atrado e menor a oscilação no sinal filtrado
+
+% % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+% % Definição das frequências
+% fc = 5; % [Hz] 3 para o sinal 119 (2.75)
+% 
+% [b_h,a_h] = butter(2,fc/(Fs/2),'high'); % Utiliza a frequência de corte normalizada (a ordem afeta muito o resultado)
+% ecg_bp = filter(b_h,a_h,ecg_l);
+% % Quanto menor a ordem, menor o atrado e menor a oscilação no sinal filtrado
 
 % Retirou as oscilações de baixissíma frequência, aproximando a média de um nível DC nulo.
 
@@ -113,7 +113,7 @@ for k1 = 1:size(mag,1)
 end
 % Determinação da frequencia do LP
 cutoff_freq_Norm = w_Norm_l(k1)/pi;
-cutoff_freq_l = cutoff_freq_Norm*fs/2;
+cutoff_freq_l = cutoff_freq_Norm*Fs/2;
 
 figure()
 plot(w_piNorm_h(k1),mag(k1),'*',w_piNorm_h,mag)
@@ -144,7 +144,7 @@ for k1 = 1:size(mag,1)
 end
 % Determinação da frequencia do HP
 cutoff_freq_Norm_h = w_Norm_h(k1)/pi;
-cutoff_freq_h = cutoff_freq_Norm_h*Fs/2;
+cutoff_freq_h = cutoff_freq_Norm_h*fs/2;
 
 figure()
 plot(w_piNorm_h(k1),mag(k1),'*',w_piNorm_h,mag)
@@ -174,6 +174,11 @@ for k1 = 1:size(ecg_bp,1)
         ecg_d(k1) = (1/8)*(2*ecg_bp(k1));
     end
 end
+
+% fc = 2; % [Hz]
+% 
+% [b_l2,a_l2] = butter(2,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+% ecg_l = filter(b_h,a_h,ecg);
 
 %% Squaring
 
@@ -386,10 +391,10 @@ TN = size(fn_eventos,1) - FN; % True negative
 % Colocar as métricas em uma table e associar os valores calculados inicialmente a vetores, uma vez pra cada sinal
 
 Sinal = n;
-Media = mean(ecgs(1:N,1));
-DP = std(ecgs(1:N,1));
+Media = mean(ecgs(1:N,2));
+DP = std(ecgs(1:N,2));
 Media_norm = mean(ecg);
-DP_norm = std(ecgs(1:N,1));
+DP_norm = std(ecgs(1:N,2));
 Nv = size(qrs_comparativo,1);
 Nd = evento_cont;
 FP_T = FP;
