@@ -71,17 +71,17 @@ for k0 = 1:size(n_sinais,1)
     ecg = ecgs(1:N,2)/max(abs(ecgs(1:N,2)));
 
     %% Implementação do filtro passa-baixas
-
-    b_l = zeros(1,13);
-    b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
-    a_l = 32*[1 -2 1];
-    ecg_l = filter(b_l,a_l,ecg);
-
-    % Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
-%     fc = 9.75; % [Hz]
-% 
-%     [b_l,a_l] = butter(2,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+%     % Filtro ppassa-baixa canonico sugerido por Pan-Tompkins
+%     b_l = zeros(1,13);
+%     b_l(1) = 1; b_l(7) = -2; b_l(13) = 1;
+%     a_l = 32*[1 -2 1];
 %     ecg_l = filter(b_l,a_l,ecg);
+
+    % Butterworth: passa-baixa, ordem 8, fc = 5Hz e fa = 360Hz
+    fc = 9.75; % [Hz]
+
+    [b_l,a_l] = butter(2,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+    ecg_l = filter(b_l,a_l,ecg);
 
     %% Implementação do filtro passa-altas
 
@@ -296,7 +296,7 @@ for k0 = 1:size(n_sinais,1)
     % Chengyu Liu et. al.
     % obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
     % obs2.: O Butterworth implementado com a função butter insere um atraso maior logo, usar 100ms de cada lado da janela
-    tolerancia = 100e-3; % [s]
+    tolerancia = 120e-3; % [s]
 
     % Criação de um vetor com a posição temporal dos eventos (baseado no vetor eventos)
     eventos_tpos  = zeros(evento_cont,1);
@@ -384,6 +384,7 @@ end
 T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN_T, p_FN, Media_IRR, DP_IRR);
 
 % Salvar em xlsx para facilitar a conversão para LaTex table
+writetable(T_metricas,'tabela_metricas.xlsx');
 %writetable(T_metricas,'tabela_metricas_canonico.xlsx');
 
 

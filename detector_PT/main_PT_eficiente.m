@@ -21,7 +21,7 @@ close all
 %       anotacao ocorreu na amostra 270, entao p=ann(3) retornará p=270.
 % type(Na,1):[char] vetor com a anotacao para cada uma das 'Na' anotacoes.  
 
-n = 115;
+n = 111;
 % Numero e extensão do arquivo
 arqnum =sprintf('%3d.mat',n);
 load (arqnum); 
@@ -67,10 +67,10 @@ ecg = ecgs(1:N,2)/max(abs(ecgs(1:N,2)));
 % a_l = 32*[1 -2 1];
 % ecg_l = filter(b_l,a_l,ecg);
 
-% Butterworth: passa alta, ordem 8, fc = 5Hz e fa = 360Hz
+% Butterworth: passa-baixas, ordem 2, fc = 9.75Hz e fa = 360Hz
 fc = 9.75; % [Hz]
 
-[b_l,a_l] = butter(3,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
+[b_l,a_l] = butter(2,fc/(Fs/2),'low'); % Utiliza a frequência de corte normalizada
 ecg_l = filter(b_l,a_l,ecg);
 
 %% Implementação do filtro passa-altas
@@ -325,7 +325,7 @@ end
 % Chengyu Liu et. al.
 % obs.: Cabe lembrar que a comparação deve descartar o primeiro segundo da séria, por conta do treino do algoritmo.
 % obs2.: O Butterworth implementado com a função butter insere um atraso maior logo, usar 100ms de cada lado da janela 
-tolerancia = 100e-3; % [s]
+tolerancia = 120e-3; % [s]
 
 % Criação de um vetor com a posição temporal dos eventos (baseado no vetor eventos)
 eventos_tpos  = zeros(evento_cont,1);
@@ -413,9 +413,8 @@ T_metricas = table(Sinal, Media, DP, Media_norm, DP_norm, Nv, Nd, FP_T, p_FP, FN
 
 %% Plot comparativo com seleção do período QRS
 
-ann_number = 40;
-t1 = ann(ann_number,1);
-t2 = ann(ann_number+3,1);
+t1 = 31800;
+t2 = 33000;
 
 figure; 
 subplot(5,1,1); 
@@ -463,10 +462,11 @@ title('Sinal 1 e a deteção de eventos');
 drawnow;
 % obs.: deve-se pegar apenas o primeiro 1 para cada evento, pois os outros são parte do pronlogamento do sinal dada a integração
 
-%%
-ann_number =30;
-t1 = ann(ann_number,1);
-t2 = ann(ann_number+20,1);
+%% Detecção com ampliação gráfica
+
+t1 = 30000;
+t2 = 35000;
+
 qrs = ecgs(t1:t2,1);
 qrs_t = ts(t1:t2);
 
